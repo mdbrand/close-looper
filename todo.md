@@ -69,5 +69,5 @@
 - [x] Loading skeletons for all data-heavy views
 - [x] Error handling and toast notifications throughout
 - [x] React deduplication fix (Vite optimizeDeps)
-- [ ] Register Google OAuth secrets (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
-- [ ] Deploy and register Heartbeat cron jobs after first deployment
+- [x] Register Google OAuth secrets (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
+- [x] Deploy and register Heartbeat cron jobs after first deployment
