@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -25,4 +25,115 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+// ─── AI Voice Profile ────────────────────────────────────────────────────────
+export const aiVoiceProfiles = mysqlTable("ai_voice_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  voiceSample: text("voiceSample").notNull(),
+  styleNotes: text("styleNotes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AiVoiceProfile = typeof aiVoiceProfiles.$inferSelect;
+export type InsertAiVoiceProfile = typeof aiVoiceProfiles.$inferInsert;
+
+// ─── Gmail Accounts ──────────────────────────────────────────────────────────
+export const gmailAccounts = mysqlTable("gmail_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  gmailAddress: varchar("gmailAddress", { length: 320 }).notNull(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken"),
+  tokenExpiry: bigint("tokenExpiry", { mode: "number" }),
+  isDefault: boolean("isDefault").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type GmailAccount = typeof gmailAccounts.$inferSelect;
+export type InsertGmailAccount = typeof gmailAccounts.$inferInsert;
+
+// ─── Contacts ────────────────────────────────────────────────────────────────
+export const contacts = mysqlTable("contacts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull(),
+  phone: varchar("phone", { length: 30 }),
+  company: varchar("company", { length: 200 }),
+  industry: varchar("industry", { length: 100 }),
+  relationshipType: mysqlEnum("relationshipType", ["referral_partner", "customer", "prospect", "other"]).default("referral_partner").notNull(),
+  howWeMet: text("howWeMet"),
+  personalNotes: text("personalNotes"),
+  linkedinUrl: varchar("linkedinUrl", { length: 500 }),
+  instagramUrl: varchar("instagramUrl", { length: 500 }),
+  facebookUrl: varchar("facebookUrl", { length: 500 }),
+  birthday: varchar("birthday", { length: 10 }), // MM-DD format
+  loopStatus: mysqlEnum("loopStatus", ["active", "paused", "archived"]).default("active").notNull(),
+  sendFrequencyWeeks: int("sendFrequencyWeeks").default(4).notNull(), // weeks between touches
+  tags: text("tags"), // JSON array of strings
+  lastTouchSentAt: timestamp("lastTouchSentAt"),
+  nextTouchScheduledAt: timestamp("nextTouchScheduledAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = typeof contacts.$inferInsert;
+
+// ─── Touchpoints ─────────────────────────────────────────────────────────────
+export const touchpoints = mysqlTable("touchpoints", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  category: mysqlEnum("category", ["federal_holiday", "quirky_holiday", "industry_specific", "personal_milestone"]).notNull(),
+  industryTag: varchar("industryTag", { length: 100 }), // for industry_specific category
+  monthDay: varchar("monthDay", { length: 5 }), // MM-DD for recurring annual dates
+  specificDate: varchar("specificDate", { length: 10 }), // YYYY-MM-DD for one-time dates
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Touchpoint = typeof touchpoints.$inferSelect;
+export type InsertTouchpoint = typeof touchpoints.$inferInsert;
+
+// ─── Email Drafts ─────────────────────────────────────────────────────────────
+export const emailDrafts = mysqlTable("email_drafts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  contactId: int("contactId").notNull(),
+  touchpointId: int("touchpointId"),
+  touchpointName: varchar("touchpointName", { length: 200 }), // snapshot at generation time
+  touchpointCategory: varchar("touchpointCategory", { length: 50 }),
+  gmailAccountId: int("gmailAccountId"), // which gmail account to send from
+  subject: varchar("subject", { length: 500 }).notNull(),
+  body: text("body").notNull(),
+  whyExplanation: varchar("whyExplanation", { length: 500 }).notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "sent", "skipped", "failed"]).default("pending").notNull(),
+  scheduledSendAt: timestamp("scheduledSendAt"),
+  sentAt: timestamp("sentAt"),
+  gmailMessageId: varchar("gmailMessageId", { length: 200 }), // Gmail message ID for reply detection
+  trackingId: varchar("trackingId", { length: 64 }).notNull(), // unique ID for open tracking pixel
+  openCount: int("openCount").default(0).notNull(),
+  firstOpenedAt: timestamp("firstOpenedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailDraft = typeof emailDrafts.$inferSelect;
+export type InsertEmailDraft = typeof emailDrafts.$inferInsert;
+
+// ─── Email Events ─────────────────────────────────────────────────────────────
+export const emailEvents = mysqlTable("email_events", {
+  id: int("id").autoincrement().primaryKey(),
+  draftId: int("draftId").notNull(),
+  eventType: mysqlEnum("eventType", ["sent", "opened", "bounced", "replied", "unsubscribed"]).notNull(),
+  occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  ipAddress: varchar("ipAddress", { length: 45 }),
+  userAgent: text("userAgent"),
+});
+
+export type EmailEvent = typeof emailEvents.$inferSelect;
+export type InsertEmailEvent = typeof emailEvents.$inferInsert;
