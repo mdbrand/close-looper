@@ -11,6 +11,7 @@ import { voiceRouter } from "./routers/voice";
 import { feedbackRouter } from "./routers/feedback";
 import { importExportRouter } from "./routers/import-export";
 import { digestRouter } from "./routers/digest";
+import { snoozeRouter } from "./routers/snooze";
 
 export const appRouter = router({
   system: systemRouter,
@@ -31,6 +32,7 @@ export const appRouter = router({
   feedback: feedbackRouter,
   importExport: importExportRouter,
   digest: digestRouter,
+  snooze: snoozeRouter,
 });
 
 export type AppRouter = typeof appRouter;

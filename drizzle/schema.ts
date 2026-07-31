@@ -76,6 +76,7 @@ export const contacts = mysqlTable("contacts", {
   tags: text("tags"), // JSON array of strings
   lastTouchSentAt: timestamp("lastTouchSentAt"),
   nextTouchScheduledAt: timestamp("nextTouchScheduledAt"),
+  snoozeUntil: timestamp("snoozeUntil"), // null = not snoozed, timestamp = resume date
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

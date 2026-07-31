@@ -108,3 +108,13 @@
 - [x] Weekly Digest Email feature — cron job + HTML template + router
 - [x] All 32 tests passing
 - [x] Zero TypeScript errors
+
+## Phase 13: Snooze Contact Feature
+- [x] Add snoozeUntil field to contacts table
+- [x] Create snooze router with snooze/unsnooze/getStatus endpoints
+- [x] Build snooze UI dropdown on Contact Detail page (1 week, 2 weeks, 1 month)
+- [x] Add snooze status indicator showing resume date
+- [x] Update getActiveContactsForCron to skip snoozed contacts
+- [x] Auto-resume when snooze period expires
+- [x] All 32 tests passing
+- [x] Zero TypeScript errors

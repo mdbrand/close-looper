@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles } from "lucide-react";
+import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles, Clock, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ContactForm from "@/components/ContactForm";
 
 const TOUCHPOINT_CATEGORIES = ["federal_holiday", "quirky_holiday", "industry_specific", "personal_milestone"];
@@ -31,6 +32,16 @@ export default function ContactDetail() {
 
   const generateMutation = trpc.drafts.generate.useMutation({
     onSuccess: () => { toast.success("Draft generated and added to queue!"); setShowGenerateDialog(false); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const { data: snoozeStatus } = trpc.snooze.getSnoozeStatus.useQuery({ contactId }, { enabled: !!contactId });
+  const snoozeMutation = trpc.snooze.snoozeContact.useMutation({
+    onSuccess: () => { toast.success("Contact snoozed!"); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const unsnoozeMutation = trpc.snooze.unsnoozeContact.useMutation({
+    onSuccess: () => { toast.success("Snooze removed!"); refetch(); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -62,6 +73,32 @@ export default function ContactDetail() {
           <Button size="sm" onClick={() => setShowGenerateDialog(true)} className="gap-1.5">
             <Sparkles className="w-3.5 h-3.5" /> Generate Email
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <MoreVertical className="w-3.5 h-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {snoozeStatus?.isSnoozed ? (
+                <DropdownMenuItem onClick={() => unsnoozeMutation.mutate({ contactId })} disabled={unsnoozeMutation.isPending}>
+                  <Clock className="w-4 h-4 mr-2" /> Unsnooze ({snoozeStatus.daysRemaining}d left)
+                </DropdownMenuItem>
+              ) : (
+                <>
+                  <DropdownMenuItem onClick={() => snoozeMutation.mutate({ contactId, durationDays: "7" })} disabled={snoozeMutation.isPending}>
+                    <Clock className="w-4 h-4 mr-2" /> Snooze 1 week
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => snoozeMutation.mutate({ contactId, durationDays: "14" })} disabled={snoozeMutation.isPending}>
+                    <Clock className="w-4 h-4 mr-2" /> Snooze 2 weeks
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => snoozeMutation.mutate({ contactId, durationDays: "30" })} disabled={snoozeMutation.isPending}>
+                    <Clock className="w-4 h-4 mr-2" /> Snooze 1 month
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -73,6 +110,11 @@ export default function ContactDetail() {
           {contact.phone && <div className="flex items-center gap-2 text-sm"><Phone className="w-4 h-4 text-muted-foreground" />{contact.phone}</div>}
           {contact.birthday && <div className="flex items-center gap-2 text-sm"><Calendar className="w-4 h-4 text-muted-foreground" />Birthday: {contact.birthday}</div>}
           <div className="flex items-center gap-2 text-sm"><Zap className="w-4 h-4 text-muted-foreground" />Every {contact.sendFrequencyWeeks} weeks</div>
+          {snoozeStatus?.isSnoozed && (
+            <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 px-2 py-1 rounded">
+              <Clock className="w-4 h-4" /> Snoozed until {new Date(snoozeStatus.snoozeUntil!).toLocaleDateString()}
+            </div>
+          )}
           <div className="flex gap-3 pt-1">
             {contact.linkedinUrl && <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors"><Linkedin className="w-4 h-4" /></a>}
             {contact.instagramUrl && <a href={contact.instagramUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors"><Instagram className="w-4 h-4" /></a>}

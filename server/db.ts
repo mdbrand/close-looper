@@ -287,7 +287,10 @@ export async function getCalendarEvents(userId: number, startDate: Date, endDate
 export async function getActiveContactsForCron(userId: number): Promise<Contact[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.loopStatus, "active")));
+  const now = new Date();
+  const allActive = await db.select().from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.loopStatus, "active")));
+  // Filter out snoozed contacts (snoozeUntil is in the future)
+  return allActive.filter(c => !c.snoozeUntil || new Date(c.snoozeUntil) <= now);
 }
 
 // Feedback Rules
