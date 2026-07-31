@@ -73,28 +73,31 @@
 - [x] Deploy and register Heartbeat cron jobs after first deployment
 
 ## Phase 9: AI Feedback Loop (Self-Correcting Rules)
-- [ ] Database schema: feedback_rules table (user_id, rule_type, pattern, replacement, confidence, created_at, applied_count)
-- [ ] Backend: capture edits when draft is approved with changes
-- [ ] Backend: analyze diff and extract rule (pattern → replacement)
-- [ ] Backend: store rule with confidence score
-- [ ] Backend: apply rules to newly generated emails before showing in queue
-- [ ] Frontend: Feedback Rules management page (view, enable/disable, delete, edit rules)
-- [ ] Frontend: show "Rule Applied" badge on emails that had rules applied
-- [ ] Tests: feedback rule capture and application
+- [x] Database schema: feedback_rules table (user_id, rule_type, pattern, replacement, confidence, created_at, applied_count)
+- [x] Backend: capture edits when draft is approved with changes
+- [x] Backend: analyze diff and extract rule (pattern → replacement)
+- [x] Backend: store rule with confidence score
+- [x] Backend: apply rules to newly generated emails before showing in queue
+- [x] Frontend: Feedback Rules management page (view, enable/disable, delete, edit rules)
+- [x] Frontend: show "Rule Applied" badge on emails that had rules applied
+- [x] Tests: feedback rule capture and application
 
 ## Phase 10: Bulk Import/Export for Contacts
-- [ ] Backend: CSV export endpoint (all contacts with all fields)
-- [ ] Backend: CSV import endpoint (parse, validate, preview, import with conflict handling)
-- [ ] Frontend: Export button on Contacts page (download CSV)
-- [ ] Frontend: Import modal with file upload, column mapping, preview
-- [ ] Frontend: show import results (success count, errors, duplicates)
-- [ ] Frontend: template CSV download button
-- [ ] Tests: CSV parsing and import validation
+- [x] Backend: CSV export endpoint (all contacts with all fields)
+- [x] Backend: CSV import endpoint (parse, validate, preview, import with conflict handling)
+- [x] Frontend: Export button on Contacts page (download CSV)
+- [x] Frontend: Import modal with file upload, column mapping, preview
+- [x] Frontend: show import results (success count, errors, duplicates)
+- [x] Frontend: template CSV download button
+- [x] Tests: CSV parsing and import validation
 
 ## Phase 11: Calendar/List View Enhancements
-- [ ] Frontend: full email body display in existing dialog (already partially done)
-- [ ] Frontend: manual send button in dialog (send immediately, outside sequence)
-- [ ] Frontend: list view click-to-open (already done)
-- [ ] Frontend: calendar view click-to-open (already done)
-- [ ] Backend: manual send endpoint (bypass queue, send immediately, record as sent)
-- [ ] Tests: manual send functionality
+- [x] Frontend: full email body display in existing dialog (already partially done)
+- [x] Frontend: manual send button in dialog (send immediately, outside sequence)
+- [x] Frontend: list view click-to-open (already done)
+- [x] Frontend: calendar view click-to-open (already done)
+- [x] Backend: manual send endpoint (bypass queue, send immediately, record as sent)
+- [x] Tests: manual send functionality
+- [x] Frontend: confirmation modal for manual send (prevent accidental sends)
+- [x] Frontend: visual progress bar for bulk import
+- [x] End-to-end tests for all three features

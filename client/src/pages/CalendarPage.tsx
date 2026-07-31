@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,7 +20,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function CalendarPage() {
   const [selectedDraft, setSelectedDraft] = useState<any>(null);
+  const [confirmSendDraft, setConfirmSendDraft] = useState<any>(null);
   const [view, setView] = useState<"calendar" | "list">("calendar");
+  const manualSendMutation = trpc.drafts.manualSend.useMutation();
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const startDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1), [currentDate]);
@@ -179,10 +183,52 @@ export default function CalendarPage() {
               </div>
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
+              {selectedDraft.status !== "sent" && (
+                <Button
+                  onClick={() => setConfirmSendDraft(selectedDraft)}
+                  className="mt-4 w-full"
+                  disabled={manualSendMutation.isPending}
+                >
+                  Send Now
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!confirmSendDraft} onOpenChange={v => !v && setConfirmSendDraft(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send email now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send the email to {confirmSendDraft?.contact?.firstName} {confirmSendDraft?.contact?.lastName} immediately, outside your approval queue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="bg-muted p-3 rounded text-sm max-h-32 overflow-auto">
+            <p className="font-mono text-xs whitespace-pre-wrap">{confirmSendDraft?.body}</p>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  await manualSendMutation.mutateAsync({ id: confirmSendDraft.id });
+                  toast.success("Email sent successfully");
+                  setConfirmSendDraft(null);
+                  setSelectedDraft(null);
+                } catch (e) {
+                  toast.error("Failed to send email");
+                }
+              }}
+              disabled={manualSendMutation.isPending}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Send Email
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
