@@ -139,10 +139,10 @@ export default function CalendarPage() {
                   {allDrafts.map(draft => {
                     const date = draft.sentAt ?? draft.scheduledSendAt ?? draft.createdAt;
                     return (
-                      <tr key={draft.id} className="border-b border-border hover:bg-muted/20 transition-colors">
+                      <tr key={draft.id} className="border-b border-border hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setSelectedDraft(draft)}>
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{date ? new Date(date).toLocaleDateString() : "—"}</td>
                         <td className="px-4 py-3 font-medium">{draft.contact?.firstName} {draft.contact?.lastName}</td>
-                        <td className="px-4 py-3 max-w-[200px] truncate text-muted-foreground">{draft.subject}</td>
+                        <td className="px-4 py-3 max-w-[200px] truncate text-foreground font-medium">{draft.subject}</td>
                         <td className="px-4 py-3">
                           {draft.touchpointCategory && (
                             <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.touchpointCategory}`}>
