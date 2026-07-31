@@ -27,6 +27,7 @@ export default function CalendarPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const manualSendMutation = trpc.drafts.manualSend.useMutation();
+  const [filterDelivery, setFilterDelivery] = useState<string | null>(null);
   const resendMutation = trpc.resend.resendEmail.useMutation();
   const { data: gmailAccounts } = trpc.gmail.list.useQuery();
   const defaultGmailId = gmailAccounts?.find(a => a.isDefault)?.id ?? gmailAccounts?.[0]?.id;
@@ -46,6 +47,7 @@ export default function CalendarPage() {
   const filteredDrafts = useMemo(() => {
     let filtered = allDrafts ?? [];
     if (filterStatus) filtered = filtered.filter(d => d.status === filterStatus);
+    if (filterDelivery) filtered = filtered.filter(d => d.deliveryStatus === filterDelivery);
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(d =>
@@ -55,7 +57,7 @@ export default function CalendarPage() {
       );
     }
     return filtered;
-  }, [allDrafts, filterStatus, searchQuery]);
+  }, [allDrafts, filterStatus, filterDelivery, searchQuery]);
 
   const prevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -175,6 +177,16 @@ export default function CalendarPage() {
                 <option value="sent">Sent</option>
                 <option value="skipped">Skipped</option>
               </select>
+              <select
+                value={filterDelivery ?? ""}
+                onChange={e => setFilterDelivery(e.target.value || null)}
+                className="px-3 py-2 text-sm border border-border rounded-lg bg-background"
+              >
+                <option value="">All Delivery</option>
+                <option value="delivered">Delivered</option>
+                <option value="bounced">Bounced</option>
+                <option value="failed">Failed</option>
+              </select>
             </div>
           </div>
           {listLoading ? (
@@ -192,6 +204,7 @@ export default function CalendarPage() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Category</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Opens</th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -222,6 +235,17 @@ export default function CalendarPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{draft.openCount > 0 ? draft.openCount : "—"}</td>
+                        <td className="px-4 py-3">
+                          {draft.status === "failed" && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); manualSendMutation.mutate({ id: draft.id }, { onSuccess: () => { toast.success("Email retry sent!"); }, onError: () => { toast.error("Retry failed"); } }); }}
+                              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                              disabled={manualSendMutation.isPending}
+                            >
+                              Retry
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}
