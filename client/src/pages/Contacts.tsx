@@ -41,8 +41,13 @@ export default function Contacts() {
   const [isImporting, setIsImporting] = useState(false);
 
   const { data: contacts, isLoading, refetch } = trpc.contacts.list.useQuery();
+  const { data: importHistory, refetch: refetchHistory } = trpc.importExport.getImportHistory.useQuery();
+  const undoImportMutation = trpc.importExport.undoImport.useMutation({
+    onSuccess: (data) => { toast.success(`Removed ${data.deleted} contacts`); refetch(); refetchHistory(); },
+    onError: (e) => toast.error(e.message),
+  });
   const importMutation = trpc.importExport.importContacts.useMutation({
-    onSuccess: (data: any) => { toast.success(`Imported ${data.imported} contacts`); setShowImportModal(false); setCsvContent(""); setImportPreview(null); refetch(); },
+    onSuccess: (data: any) => { toast.success(`Imported ${data.imported} contacts${data.skipped ? `, ${data.skipped} duplicates skipped` : ""}`); setShowImportModal(false); setCsvContent(""); setImportPreview(null); refetch(); refetchHistory(); },
     onError: (e) => toast.error(e.message),
   });
   const parseMutation = trpc.importExport.parseImportCSV.useMutation();
@@ -69,30 +74,29 @@ export default function Contacts() {
     reader.onload = (ev) => {
       const text = ev.target?.result as string;
       setCsvContent(text);
-      const lines = text.split("\n").filter(l => l.trim());
-      const headers = lines[0]?.split(",").map(h => h.trim().replace(/"/g, ""));
-      const rows = lines.slice(1, 6).map(line => {
-        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
-        const row: Record<string, string> = {};
-        headers?.forEach((h, i) => { row[h] = cols[i] ?? ""; });
-        return row;
+      parseMutation.mutate({ csvContent: text }, {
+        onSuccess: (parsed) => {
+          setImportPreview({
+            headers: parsed.columnMapping.map((m: any) => m.mapped),
+            columnMapping: parsed.columnMapping,
+            rows: parsed.preview,
+            allRows: parsed.allRows,
+            totalRows: parsed.count,
+            filename: file.name,
+          });
+        },
+        onError: () => toast.error("Failed to parse CSV"),
       });
-      setImportPreview({ headers, rows, totalRows: lines.length - 1 });
     };
     reader.readAsText(file);
   };
 
   const handleImport = () => {
-    if (!csvContent) return;
+    if (!importPreview?.allRows) return;
     setIsImporting(true);
     setImportProgress(50);
-    parseMutation.mutate({ csvContent }, {
-      onSuccess: (parsed) => {
-        importMutation.mutate({ rows: parsed.allRows, skipDuplicates: true }, {
-          onSettled: () => { setIsImporting(false); setImportProgress(100); },
-        });
-      },
-      onError: () => { setIsImporting(false); toast.error("Failed to parse CSV"); },
+    importMutation.mutate({ rows: importPreview.allRows, skipDuplicates: true, filename: importPreview.filename || "import.csv" }, {
+      onSettled: () => { setIsImporting(false); setImportProgress(100); },
     });
   };
 
@@ -276,7 +280,21 @@ export default function Contacts() {
             )}
             {importPreview && (
               <div className="space-y-3">
-                <p className="text-sm font-medium">{importPreview.totalRows} contacts found in file</p>
+                <p className="text-sm font-medium">{importPreview.totalRows} contacts found in "{importPreview.filename}"</p>
+                {importPreview.columnMapping && (
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Column Mapping (auto-detected)</p>
+                    <div className="grid grid-cols-2 gap-1 text-xs">
+                      {importPreview.columnMapping.map((m: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-muted-foreground truncate">{m.original}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-medium text-foreground">{m.mapped}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="overflow-x-auto border border-border rounded-lg">
                   <table className="w-full text-xs">
                     <thead><tr className="bg-muted/50">{importPreview.headers?.slice(0, 5).map((h: string) => <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>)}</tr></thead>
@@ -294,6 +312,32 @@ export default function Contacts() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Import History */}
+      {importHistory && importHistory.length > 0 && (
+        <div className="mt-8 bg-card border border-border rounded-xl p-5">
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Import History</h3>
+          <div className="space-y-2">
+            {importHistory.map((batch: any) => (
+              <div key={batch.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <div>
+                  <p className="text-sm font-medium">{batch.filename || "import.csv"}</p>
+                  <p className="text-xs text-muted-foreground">{batch.contactCount} contacts • {new Date(batch.createdAt).toLocaleDateString()}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => { if (confirm(`Undo this import? This will delete ${batch.contactCount} contacts.`)) undoImportMutation.mutate({ batchId: batch.id }); }}
+                  disabled={undoImportMutation.isPending}
+                >
+                  Undo Import
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+            <p className="text-xs text-muted-foreground italic">We auto-detect columns like "firstname", "fname", "First Name", "given name", etc.</p>
