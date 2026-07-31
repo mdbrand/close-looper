@@ -101,3 +101,10 @@
 - [x] Frontend: confirmation modal for manual send (prevent accidental sends)
 - [x] Frontend: visual progress bar for bulk import
 - [x] End-to-end tests for all three features
+
+## Phase 12: Final Features
+- [x] Wire Feedback Rules into Approval Queue — capture edits automatically as rules
+- [x] Generate Draft Now button — already exists on Contact Detail page
+- [x] Weekly Digest Email feature — cron job + HTML template + router
+- [x] All 32 tests passing
+- [x] Zero TypeScript errors

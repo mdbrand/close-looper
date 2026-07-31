@@ -32,6 +32,7 @@ export default function Queue() {
     onSuccess: () => { toast.success("Draft skipped"); refetch(); },
     onError: (e) => toast.error(e.message),
   });
+  const feedbackCaptureMutation = trpc.feedback.captureEdit.useMutation();
   const editMutation = trpc.drafts.edit.useMutation({
     onSuccess: () => { toast.success("Draft updated!"); setEditingId(null); refetch(); },
     onError: (e) => toast.error(e.message),
@@ -131,7 +132,18 @@ export default function Queue() {
                           <Textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={6} className="text-sm leading-relaxed" />
                         </div>
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => editMutation.mutate({ id: draft.id, subject: editSubject, body: editBody })} disabled={editMutation.isPending}>
+                          <Button size="sm" onClick={() => {
+                            editMutation.mutate({ id: draft.id, subject: editSubject, body: editBody }, {
+                              onSuccess: () => {
+                                // Capture the edit as a feedback rule
+                                feedbackCaptureMutation.mutate({
+                                  draftId: draft.id,
+                                  originalBody: draft.body,
+                                  editedBody: editBody,
+                                });
+                              },
+                            });
+                          }} disabled={editMutation.isPending}>
                             {editMutation.isPending ? "Saving..." : "Save changes"}
                           </Button>
                           <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>Cancel</Button>

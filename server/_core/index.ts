@@ -11,6 +11,7 @@ import { serveStatic, setupVite } from "./vite";
 import { recordEmailOpen, getEmailDraftByTrackingId, upsertGmailAccount, createEmailEvent } from "../db";
 import { generateDraftsHandler } from "../scheduled/generateDrafts";
 import { checkRepliesHandler } from "../scheduled/checkReplies";
+import { sendWeeklyDigestRouter } from "../scheduled/sendWeeklyDigest";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -93,6 +94,7 @@ async function startServer() {
   // ─── Scheduled Cron Handlers ─────────────────────────────────────────────
   app.post("/api/scheduled/generateDrafts", generateDraftsHandler);
   app.post("/api/scheduled/checkReplies", checkRepliesHandler);
+  app.use(sendWeeklyDigestRouter);
 
   // ─── tRPC API ─────────────────────────────────────────────────────────────
   app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
