@@ -5,11 +5,13 @@ import {
   Contact,
   EmailDraft,
   EmailEvent,
+  FeedbackRule,
   GmailAccount,
   InsertAiVoiceProfile,
   InsertContact,
   InsertEmailDraft,
   InsertEmailEvent,
+  InsertFeedbackRule,
   InsertGmailAccount,
   InsertTouchpoint,
   InsertUser,
@@ -18,6 +20,7 @@ import {
   contacts,
   emailDrafts,
   emailEvents,
+  feedbackRules,
   gmailAccounts,
   touchpoints,
   users,
@@ -285,4 +288,53 @@ export async function getActiveContactsForCron(userId: number): Promise<Contact[
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.loopStatus, "active")));
+}
+
+// Feedback Rules
+export async function getFeedbackRules(userId: number, activeOnly = true): Promise<FeedbackRule[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(feedbackRules.userId, userId)];
+  if (activeOnly) conditions.push(eq(feedbackRules.isActive, true));
+  return db.select().from(feedbackRules).where(and(...conditions)).orderBy(desc(feedbackRules.createdAt));
+}
+
+export async function createFeedbackRule(rule: InsertFeedbackRule): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(feedbackRules).values(rule);
+  return (result as any)[0]?.insertId ?? 0;
+}
+
+export async function updateFeedbackRule(ruleId: number, userId: number, updates: Partial<Omit<FeedbackRule, "id" | "createdAt">>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(feedbackRules).set({ ...updates, updatedAt: new Date() }).where(and(eq(feedbackRules.id, ruleId), eq(feedbackRules.userId, userId)));
+}
+
+export async function deleteFeedbackRule(ruleId: number, userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(feedbackRules).where(and(eq(feedbackRules.id, ruleId), eq(feedbackRules.userId, userId)));
+}
+
+export async function applyFeedbackRules(text: string, userId: number): Promise<{ text: string; appliedRules: number[] }> {
+  const rules = await getFeedbackRules(userId, true);
+  let result = text;
+  const appliedRuleIds: number[] = [];
+  for (const rule of rules) {
+    if (rule.confidence >= 60) {
+      try {
+        const regex = new RegExp(rule.pattern, "gi");
+        if (regex.test(result)) {
+          result = result.replace(regex, rule.replacement);
+          appliedRuleIds.push(rule.id);
+          await updateFeedbackRule(rule.id, userId, { appliedCount: rule.appliedCount + 1 });
+        }
+      } catch (e) {
+        // invalid regex, skip
+      }
+    }
+  }
+  return { text: result, appliedRules: appliedRuleIds };
 }

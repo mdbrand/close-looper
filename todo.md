@@ -71,3 +71,30 @@
 - [x] React deduplication fix (Vite optimizeDeps)
 - [x] Register Google OAuth secrets (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
 - [x] Deploy and register Heartbeat cron jobs after first deployment
+
+## Phase 9: AI Feedback Loop (Self-Correcting Rules)
+- [ ] Database schema: feedback_rules table (user_id, rule_type, pattern, replacement, confidence, created_at, applied_count)
+- [ ] Backend: capture edits when draft is approved with changes
+- [ ] Backend: analyze diff and extract rule (pattern → replacement)
+- [ ] Backend: store rule with confidence score
+- [ ] Backend: apply rules to newly generated emails before showing in queue
+- [ ] Frontend: Feedback Rules management page (view, enable/disable, delete, edit rules)
+- [ ] Frontend: show "Rule Applied" badge on emails that had rules applied
+- [ ] Tests: feedback rule capture and application
+
+## Phase 10: Bulk Import/Export for Contacts
+- [ ] Backend: CSV export endpoint (all contacts with all fields)
+- [ ] Backend: CSV import endpoint (parse, validate, preview, import with conflict handling)
+- [ ] Frontend: Export button on Contacts page (download CSV)
+- [ ] Frontend: Import modal with file upload, column mapping, preview
+- [ ] Frontend: show import results (success count, errors, duplicates)
+- [ ] Frontend: template CSV download button
+- [ ] Tests: CSV parsing and import validation
+
+## Phase 11: Calendar/List View Enhancements
+- [ ] Frontend: full email body display in existing dialog (already partially done)
+- [ ] Frontend: manual send button in dialog (send immediately, outside sequence)
+- [ ] Frontend: list view click-to-open (already done)
+- [ ] Frontend: calendar view click-to-open (already done)
+- [ ] Backend: manual send endpoint (bypass queue, send immediately, record as sent)
+- [ ] Tests: manual send functionality

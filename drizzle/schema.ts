@@ -137,3 +137,25 @@ export const emailEvents = mysqlTable("email_events", {
 
 export type EmailEvent = typeof emailEvents.$inferSelect;
 export type InsertEmailEvent = typeof emailEvents.$inferInsert;
+
+// ─── Feedback Rules ──────────────────────────────────────────────────────────
+/**
+ * Feedback rules table — stores learned corrections from user edits
+ * When a user edits a draft, the system extracts the pattern and stores it as a rule
+ * Future emails are checked against these rules and corrected automatically
+ */
+export const feedbackRules = mysqlTable("feedback_rules", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  ruleType: varchar("ruleType", { length: 50 }).notNull(), // "phrase_replacement", "tone_adjustment", "fluff_removal"
+  pattern: text("pattern").notNull(), // the phrase/pattern to match
+  replacement: text("replacement").notNull(), // what to replace it with
+  confidence: int("confidence").default(50).notNull(), // 0-100, how confident we are in this rule
+  appliedCount: int("appliedCount").default(0).notNull(), // how many times this rule has been applied
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type FeedbackRule = typeof feedbackRules.$inferSelect;
+export type InsertFeedbackRule = typeof feedbackRules.$inferInsert;
