@@ -58,4 +58,23 @@ export const analyticsRouter = router({
     }));
     return enriched.filter(e => e.contact);
   }),
+
+  contactHistory: protectedProcedure.input(z.object({
+    contactId: z.number(),
+  })).query(async ({ ctx, input }) => {
+    const drafts = await db.getEmailDrafts(ctx.user.id);
+    const contactDrafts = drafts
+      .filter(d => d.contactId === input.contactId)
+      .sort((a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0))
+      .slice(0, 5);
+
+    return contactDrafts.map(d => ({
+      id: d.id,
+      type: d.status === "sent" ? "sent" : "draft",
+      subject: d.subject,
+      date: d.sentAt ?? d.createdAt,
+      opens: d.openCount,
+      status: d.status,
+    }));
+  }),
 });
