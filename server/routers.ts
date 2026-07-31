@@ -8,6 +8,8 @@ import { touchpointsRouter } from "./routers/touchpoints";
 import { draftsRouter } from "./routers/drafts";
 import { analyticsRouter } from "./routers/analytics";
 import { voiceRouter } from "./routers/voice";
+import { feedbackRouter } from "./routers/feedback";
+import { importExportRouter } from "./routers/import-export";
 
 export const appRouter = router({
   system: systemRouter,
@@ -25,6 +27,8 @@ export const appRouter = router({
   drafts: draftsRouter,
   analytics: analyticsRouter,
   voice: voiceRouter,
+  feedback: feedbackRouter,
+  importExport: importExportRouter,
 });
 
 export type AppRouter = typeof appRouter;

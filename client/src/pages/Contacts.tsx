@@ -8,9 +8,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Search, MoreVertical, Pencil, Trash2, PauseCircle, PlayCircle, Archive, Zap, User, Building2, Tag } from "lucide-react";
+import { Plus, Search, MoreVertical, Pencil, Trash2, PauseCircle, PlayCircle, Archive, Zap, User, Building2, Tag, Download, Upload } from "lucide-react";
 import { useLocation } from "wouter";
 import ContactForm from "@/components/ContactForm";
+import { Textarea } from "@/components/ui/textarea";
 
 const INDUSTRY_OPTIONS = [
   "construction", "real_estate", "healthcare", "finance", "marketing",
@@ -33,6 +34,9 @@ export default function Contacts() {
   const [filterIndustry, setFilterIndustry] = useState<string>("all");
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editContact, setEditContact] = useState<any>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [csvContent, setCsvContent] = useState("");
+  const [importPreview, setImportPreview] = useState<any>(null);
 
   const { data: contacts, isLoading, refetch } = trpc.contacts.list.useQuery();
   const deleteMutation = trpc.contacts.delete.useMutation({

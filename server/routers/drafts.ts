@@ -155,6 +155,78 @@ export const draftsRouter = router({
     return { success: true };
   }),
 
+  manualSend: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const draft = await db.getEmailDraft(input.id, ctx.user.id);
+    if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
+    if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
+    
+    const gmailAccount = draft.gmailAccountId
+      ? await db.getGmailAccount(draft.gmailAccountId)
+      : (await db.getGmailAccounts(ctx.user.id)).find(a => a.isDefault);
+    
+    if (!gmailAccount) throw new TRPCError({ code: "BAD_REQUEST", message: "No Gmail account configured" });
+    
+    const contact = await db.getContact(draft.contactId, ctx.user.id);
+    if (!contact) throw new TRPCError({ code: "NOT_FOUND" });
+    
+    try {
+      const { google } = await import("googleapis");
+      const oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REDIRECT_URI
+      );
+      oauth2Client.setCredentials({
+        access_token: gmailAccount.accessToken,
+        refresh_token: gmailAccount.refreshToken ?? undefined,
+        expiry_date: gmailAccount.tokenExpiry ?? undefined,
+      });
+      
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      if (credentials.access_token && credentials.access_token !== gmailAccount.accessToken) {
+        await db.upsertGmailAccount({
+          userId: ctx.user.id,
+          gmailAddress: gmailAccount.gmailAddress,
+          accessToken: credentials.access_token,
+          refreshToken: credentials.refresh_token ?? gmailAccount.refreshToken ?? "",
+          tokenExpiry: credentials.expiry_date ?? null,
+          isDefault: gmailAccount.isDefault,
+        });
+        oauth2Client.setCredentials(credentials);
+      }
+      
+      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+      const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;
+      const unsubscribeUrl = `${process.env.VITE_APP_URL ?? ""}/api/unsubscribe/${draft.trackingId}`;
+      const bodyWithTracking = `${draft.body}\n\n---\n<a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
+      
+      const emailLines = [
+        `From: ${gmailAccount.gmailAddress}`,
+        `To: ${contact.email}`,
+        `Subject: ${draft.subject}`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=utf-8`,
+        ``,
+        bodyWithTracking.replace(/\n/g, "<br>"),
+      ];
+      const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
+      const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+      
+      await db.updateEmailDraft(input.id, ctx.user.id, {
+        status: "sent",
+        sentAt: new Date(),
+        gmailMessageId: sent.data.id ?? null,
+      });
+      await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
+      await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
+      
+      return { success: true, messageId: sent.data.id };
+    } catch (err: any) {
+      await db.updateEmailDraft(input.id, ctx.user.id, { status: "failed" });
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to send: ${err.message}` });
+    }
+  }),
+
   send: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const draft = await db.getEmailDraft(input.id, ctx.user.id);
     if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
