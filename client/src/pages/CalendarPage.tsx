@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -97,11 +98,24 @@ export default function CalendarPage() {
                       <>
                         <div className={`w-7 h-7 flex items-center justify-center rounded-full text-sm mb-1 ${isToday ? "bg-primary text-primary-foreground font-semibold" : "text-foreground"}`}>{day}</div>
                         <div className="space-y-0.5">
-                          {events.slice(0, 3).map(event => (
-                            <div key={event.id} className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)}>
-                              {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.
-                            </div>
-                          ))}
+                          {events.slice(0, 3).map(event => {
+                            const firstLine = event.body?.split('\n')[0]?.substring(0, 50) ?? "";
+                            return (
+                              <Tooltip key={event.id}>
+                                <TooltipTrigger asChild>
+                                  <div className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)}>
+                                    {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent side="right" className="max-w-xs">
+                                  <div className="space-y-1">
+                                    <p className="font-medium text-sm">{event.subject}</p>
+                                    <p className="text-xs text-muted-foreground line-clamp-2">{firstLine}</p>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          })}
                           {events.length > 3 && <div className="text-xs text-muted-foreground px-1">+{events.length - 3} more</div>}
                         </div>
                       </>

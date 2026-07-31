@@ -12,6 +12,7 @@ import { feedbackRouter } from "./routers/feedback";
 import { importExportRouter } from "./routers/import-export";
 import { digestRouter } from "./routers/digest";
 import { snoozeRouter } from "./routers/snooze";
+import { resendRouter } from "./routers/resend";
 
 export const appRouter = router({
   system: systemRouter,
@@ -33,6 +34,7 @@ export const appRouter = router({
   importExport: importExportRouter,
   digest: digestRouter,
   snooze: snoozeRouter,
+  resend: resendRouter,
 });
 
 export type AppRouter = typeof appRouter;
