@@ -198,7 +198,7 @@ export const draftsRouter = router({
       const gmail = google.gmail({ version: "v1", auth: oauth2Client });
       const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;
       const unsubscribeUrl = `${process.env.VITE_APP_URL ?? ""}/api/unsubscribe/${draft.trackingId}`;
-      const bodyWithTracking = `${draft.body}\n\n---\n<a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
+      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p><hr><p><a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
       
       const emailLines = [
         `From: ${gmailAccount.gmailAddress}`,
@@ -207,9 +207,9 @@ export const draftsRouter = router({
         `MIME-Version: 1.0`,
         `Content-Type: text/html; charset=utf-8`,
         ``,
-        bodyWithTracking.replace(/\n/g, "<br>"),
+        htmlBody,
       ];
-      const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
+      const raw = Buffer.from(emailLines.join("\r\n"), "utf-8").toString("base64url");
       const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
       
       await db.updateEmailDraft(input.id, ctx.user.id, {
