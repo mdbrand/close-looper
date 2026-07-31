@@ -37,8 +37,65 @@ export default function Contacts() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [csvContent, setCsvContent] = useState("");
   const [importPreview, setImportPreview] = useState<any>(null);
+  const [importProgress, setImportProgress] = useState(0);
+  const [isImporting, setIsImporting] = useState(false);
 
   const { data: contacts, isLoading, refetch } = trpc.contacts.list.useQuery();
+  const importMutation = trpc.importExport.importContacts.useMutation({
+    onSuccess: (data: any) => { toast.success(`Imported ${data.imported} contacts`); setShowImportModal(false); setCsvContent(""); setImportPreview(null); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const parseMutation = trpc.importExport.parseImportCSV.useMutation();
+  const utils = trpc.useUtils();
+
+  const handleExport = async () => {
+    try {
+      const data = await utils.importExport.exportContacts.fetch();
+      const blob = new Blob([data.csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = data.filename; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Contacts exported");
+    } catch (e: any) {
+      toast.error(e.message || "Export failed");
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvContent(text);
+      const lines = text.split("\n").filter(l => l.trim());
+      const headers = lines[0]?.split(",").map(h => h.trim().replace(/"/g, ""));
+      const rows = lines.slice(1, 6).map(line => {
+        const cols = line.split(",").map(c => c.trim().replace(/"/g, ""));
+        const row: Record<string, string> = {};
+        headers?.forEach((h, i) => { row[h] = cols[i] ?? ""; });
+        return row;
+      });
+      setImportPreview({ headers, rows, totalRows: lines.length - 1 });
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = () => {
+    if (!csvContent) return;
+    setIsImporting(true);
+    setImportProgress(50);
+    parseMutation.mutate({ csvContent }, {
+      onSuccess: (parsed) => {
+        importMutation.mutate({ rows: parsed.allRows, skipDuplicates: true }, {
+          onSettled: () => { setIsImporting(false); setImportProgress(100); },
+        });
+      },
+      onError: () => { setIsImporting(false); toast.error("Failed to parse CSV"); },
+    });
+  };
+
   const deleteMutation = trpc.contacts.delete.useMutation({
     onSuccess: () => { toast.success("Contact deleted"); refetch(); },
     onError: (e) => toast.error(e.message),
@@ -63,11 +120,19 @@ export default function Contacts() {
           <h1 className="text-3xl font-serif text-foreground">Contacts</h1>
           <p className="text-muted-foreground text-sm mt-1">
             {contacts?.length ?? 0} people in your network
-          </p>
+        </p>
+       </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowImportModal(true)} variant="outline" className="gap-2">
+            <Upload className="w-4 h-4" /> Import CSV
+          </Button>
+          <Button onClick={handleExport} variant="outline" className="gap-2">
+            <Download className="w-4 h-4" /> Export
+          </Button>
+          <Button onClick={() => setShowAddDialog(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Contact
+          </Button>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Add Contact
-        </Button>
       </div>
 
       {/* Filters */}
@@ -191,6 +256,42 @@ export default function Contacts() {
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-serif text-2xl">Edit Contact</DialogTitle></DialogHeader>
           {editContact && <ContactForm contact={editContact} onSuccess={() => { setEditContact(null); refetch(); }} />}
+        </DialogContent>
+      </Dialog>
+      {/* Import CSV Modal */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-serif text-2xl">Import Contacts from CSV</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Upload a CSV file with columns: First Name, Last Name, Email, Phone, Company, Industry, Relationship Type, How We Met, Personal Notes, LinkedIn, Instagram, Facebook, Birthday, Send Frequency (weeks), Tags</p>
+            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+              <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-2">Drop your CSV file here or click to browse</p>
+              <input type="file" accept=".csv" onChange={handleFileUpload} className="block mx-auto text-sm" />
+            </div>
+            {isImporting && (
+              <div className="w-full bg-muted rounded-full h-2">
+                <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${importProgress}%` }} />
+              </div>
+            )}
+            {importPreview && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{importPreview.totalRows} contacts found in file</p>
+                <div className="overflow-x-auto border border-border rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-muted/50">{importPreview.headers?.slice(0, 5).map((h: string) => <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>)}</tr></thead>
+                    <tbody>{importPreview.rows.map((row: any, i: number) => <tr key={i} className="border-t border-border">{importPreview.headers?.slice(0, 5).map((h: string) => <td key={h} className="px-2 py-1 truncate max-w-[120px]">{row[h]}</td>)}</tr>)}</tbody>
+                  </table>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => { setShowImportModal(false); setCsvContent(""); setImportPreview(null); }}>Cancel</Button>
+                  <Button onClick={handleImport} disabled={isImporting}>
+                    {isImporting ? "Importing..." : `Import ${importPreview.totalRows} Contacts`}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
