@@ -229,7 +229,11 @@ export const draftsRouter = router({
       await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
       await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
       
-      return { success: true, messageId: sent.data.id };
+      await notifyOwner({
+        title: "Email Sent",
+        content: `Your email to ${contact.firstName} ${contact.lastName} has been sent successfully.`,
+      });
+      return { success: true, messageId: sent.data.id, deliveryStatus: "delivered" };
     } catch (err: any) {
       console.error("[manualSend] Error sending email:", {
         error: err.message,

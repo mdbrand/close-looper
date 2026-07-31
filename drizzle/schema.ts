@@ -119,6 +119,10 @@ export const emailDrafts = mysqlTable("email_drafts", {
   trackingId: varchar("trackingId", { length: 64 }).notNull(), // unique ID for open tracking pixel
   openCount: int("openCount").default(0).notNull(),
   firstOpenedAt: timestamp("firstOpenedAt"),
+  deliveryStatus: mysqlEnum("deliveryStatus", ["pending", "delivered", "bounced", "failed"]).default("pending").notNull(),
+  retryCount: int("retryCount").default(0).notNull(),
+  lastRetryAt: timestamp("lastRetryAt"),
+  nextRetryAt: timestamp("nextRetryAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

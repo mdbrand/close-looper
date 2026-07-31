@@ -210,7 +210,16 @@ export default function CalendarPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.status}`}>{draft.status}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.status}`}>{draft.status}</span>
+                            {draft.deliveryStatus && draft.deliveryStatus !== "pending" && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                draft.deliveryStatus === "delivered" ? "bg-green-100 text-green-700" :
+                                draft.deliveryStatus === "bounced" ? "bg-yellow-100 text-yellow-700" :
+                                "bg-red-100 text-red-700"
+                              }`}>{draft.deliveryStatus}</span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{draft.openCount > 0 ? draft.openCount : "—"}</td>
                       </tr>
