@@ -316,4 +316,19 @@ export const draftsRouter = router({
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to send: ${err.message}` });
     }
   }),
+
+  scheduleSend: protectedProcedure
+    .input(z.object({ id: z.number(), scheduledSendAt: z.date() }))
+    .mutation(async ({ ctx, input }) => {
+      const draft = await db.getEmailDraft(input.id, ctx.user.id);
+      if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
+      if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
+      
+      await db.updateEmailDraft(input.id, ctx.user.id, {
+        status: "approved",
+        scheduledSendAt: input.scheduledSendAt,
+      });
+      
+      return { success: true, scheduledAt: input.scheduledSendAt };
+    }),
 });

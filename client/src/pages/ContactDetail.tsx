@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles, Clock, MoreVertical } from "lucide-react";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Send } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
+import { Send, CalendarClock } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ContactForm from "@/components/ContactForm";
 
@@ -21,6 +22,9 @@ export default function ContactDetail() {
   const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(null);
   const [selectedEmail, setSelectedEmail] = useState<any>(null);
   const [showSendConfirm, setShowSendConfirm] = useState(false);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("09:00");
 
   const contactId = parseInt(id ?? "0");
   const { data: contact, isLoading, refetch } = trpc.contacts.get.useQuery({ id: contactId }, { enabled: !!contactId });
@@ -41,7 +45,12 @@ export default function ContactDetail() {
 
   const manualSendMutation = trpc.drafts.manualSend.useMutation({
     onSuccess: () => { toast.success("Email sent!"); setSelectedEmail(null); setShowSendConfirm(false); },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => toast.error(e.message || "Failed to send"),
+  });
+
+  const scheduleMutation = trpc.drafts.scheduleSend.useMutation({
+    onSuccess: () => { toast.success("Email scheduled!"); setSelectedEmail(null); setShowSchedule(false); },
+    onError: (e) => toast.error(e.message || "Failed to schedule"),
   });
 
   const { data: snoozeStatus } = trpc.snooze.getSnoozeStatus.useQuery({ contactId }, { enabled: !!contactId });
@@ -262,14 +271,24 @@ export default function ContactDetail() {
                 <p className="text-xs text-muted-foreground italic">Why: {selectedEmail.whyExplanation}</p>
               )}
               {(selectedEmail.status === "pending" || selectedEmail.status === "approved") && (
-                <Button
-                  className="w-full gap-2"
-                  onClick={() => setShowSendConfirm(true)}
-                  disabled={manualSendMutation.isPending}
-                >
-                  <Send className="w-4 h-4" />
-                  {manualSendMutation.isPending ? "Sending..." : "Send Now"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1 gap-2"
+                    onClick={() => setShowSendConfirm(true)}
+                    disabled={manualSendMutation.isPending}
+                  >
+                    <Send className="w-4 h-4" />
+                    {manualSendMutation.isPending ? "Sending..." : "Send Now"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 gap-2"
+                    onClick={() => { setScheduleDate(""); setShowSchedule(true); }}
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                    Schedule
+                  </Button>
+                </div>
               )}
               {selectedEmail.status === "sent" && (
                 <div className="text-xs text-muted-foreground text-center">
@@ -298,6 +317,41 @@ export default function ContactDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Schedule Send Dialog */}
+      <Dialog open={showSchedule} onOpenChange={setShowSchedule}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Schedule Send</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Pick a date and time to send "{selectedEmail?.subject}" to {contact.firstName}.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Date</label>
+                <Input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} min={new Date().toISOString().split("T")[0]} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Time</label>
+                <Input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} />
+              </div>
+            </div>
+            <Button
+              className="w-full gap-2"
+              disabled={!scheduleDate || scheduleMutation.isPending}
+              onClick={() => {
+                if (selectedEmail && scheduleDate) {
+                  const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
+                  scheduleMutation.mutate({ id: selectedEmail.id, scheduledSendAt: scheduledAt });
+                }
+              }}
+            >
+              <CalendarClock className="w-4 h-4" />
+              {scheduleMutation.isPending ? "Scheduling..." : "Schedule Email"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
