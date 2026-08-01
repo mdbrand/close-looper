@@ -337,24 +337,6 @@ export default function Contacts() {
                 </div>
               </div>
             )}
-            {/* Scan Another success state */}
-            {showScanAnother && !scanPreview && !scanMutation.isPending && (
-              <div className="text-center py-6 space-y-4">
-                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-7 h-7 text-green-600" />
-                </div>
-                <div>
-                  <p className="font-medium">{scanCount} contact{scanCount !== 1 ? "s" : ""} added this session</p>
-                  <p className="text-sm text-muted-foreground mt-1">Ready to scan another card?</p>
-                </div>
-                <div className="flex gap-2 justify-center">
-                  <Button variant="outline" onClick={() => { setShowScanModal(false); setScanCount(0); setShowScanAnother(false); }}>Done</Button>
-                  <Button onClick={() => { setShowScanAnother(false); setScanImageUrl(""); }} className="gap-2">
-                    <Camera className="w-4 h-4" /> Scan Another Card
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
