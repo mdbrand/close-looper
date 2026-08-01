@@ -19,6 +19,14 @@ const schema = z.object({
   company: z.string().optional(),
   industry: z.string().optional(),
   relationshipType: z.enum(["referral_partner", "customer", "prospect", "other"]).default("referral_partner"),
+  relationshipTier: z.enum(["cold", "warm", "hot"]).default("warm"),
+  loopType: z.enum(["relationship_sequence", "flexible_touchpoints", "manual", "none"]).default("flexible_touchpoints"),
+  contactSource: z.string().optional(),
+  sourceName: z.string().optional(),
+  sourceLocation: z.string().optional(),
+  sourceUrl: z.string().optional(),
+  dateFoundOrMet: z.string().optional(),
+  permissionNote: z.string().optional(),
   howWeMet: z.string().optional(),
   personalNotes: z.string().optional(),
   linkedinUrl: z.string().optional(),
@@ -61,6 +69,14 @@ export default function ContactForm({ contact, onSuccess }: { contact?: any; onS
       company: contact.company ?? "",
       industry: contact.industry ?? "",
       relationshipType: contact.relationshipType,
+      relationshipTier: contact.relationshipTier ?? "warm",
+      loopType: contact.loopType ?? "flexible_touchpoints",
+      contactSource: contact.contactSource ?? "",
+      sourceName: contact.sourceName ?? "",
+      sourceLocation: contact.sourceLocation ?? "",
+      sourceUrl: contact.sourceUrl ?? "",
+      dateFoundOrMet: contact.dateFoundOrMet ?? "",
+      permissionNote: contact.permissionNote ?? "",
       howWeMet: contact.howWeMet ?? "",
       personalNotes: contact.personalNotes ?? "",
       linkedinUrl: contact.linkedinUrl ?? "",
@@ -69,7 +85,7 @@ export default function ContactForm({ contact, onSuccess }: { contact?: any; onS
       birthday: contact.birthday ?? "",
       loopStatus: contact.loopStatus,
       sendFrequencyWeeks: contact.sendFrequencyWeeks,
-    } : { relationshipType: "referral_partner", loopStatus: "active", sendFrequencyWeeks: 4 },
+    } : { relationshipType: "referral_partner", relationshipTier: "warm", loopType: "flexible_touchpoints", loopStatus: "active", sendFrequencyWeeks: 4 },
   });
 
   const createMutation = trpc.contacts.create.useMutation({
@@ -150,6 +166,31 @@ export default function ContactForm({ contact, onSuccess }: { contact?: any; onS
           </Select>
         </div>
         <div className="space-y-1.5">
+          <Label>Relationship Strength</Label>
+          <Select value={watch("relationshipTier")} onValueChange={v => { setValue("relationshipTier", v as any); if (v === "cold") setValue("loopType", "relationship_sequence" as any); }}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cold">Cold</SelectItem>
+              <SelectItem value="warm">Warm</SelectItem>
+              <SelectItem value="hot">Hot</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Automation Type</Label>
+          <Select value={watch("loopType")} onValueChange={v => setValue("loopType", v as any)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="relationship_sequence">Relationship Sequence</SelectItem>
+              <SelectItem value="flexible_touchpoints">Flexible Touchpoint Loop</SelectItem>
+              <SelectItem value="manual">Manual</SelectItem>
+              <SelectItem value="none">None</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
           <Label>Loop Status</Label>
           <Select value={watch("loopStatus")} onValueChange={v => setValue("loopStatus", v as any)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -161,6 +202,44 @@ export default function ContactForm({ contact, onSuccess }: { contact?: any; onS
           </Select>
         </div>
       </div>
+      {/* Contact Source */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <Label>Contact Source</Label>
+          <Select value={watch("contactSource") ?? ""} onValueChange={v => setValue("contactSource", v)}>
+            <SelectTrigger><SelectValue placeholder="How did you find them?" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="business_card">Business Card</SelectItem>
+              <SelectItem value="coffee_shop_board">Coffee Shop Board</SelectItem>
+              <SelectItem value="bookstore_board">Bookstore Board</SelectItem>
+              <SelectItem value="magazine_ad">Magazine Advertisement</SelectItem>
+              <SelectItem value="chamber_directory">Chamber Directory</SelectItem>
+              <SelectItem value="business_directory">Business Directory</SelectItem>
+              <SelectItem value="public_event_list">Public Event List</SelectItem>
+              <SelectItem value="company_website">Company Website</SelectItem>
+              <SelectItem value="referral">Referral</SelectItem>
+              <SelectItem value="networking_event">Networking Event</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Date Found/Met</Label>
+          <Input {...register("dateFoundOrMet")} type="date" />
+        </div>
+      </div>
+      {watch("contactSource") && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Source Name</Label>
+            <Input {...register("sourceName")} placeholder="e.g., Torrance Chamber" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Source Location/URL</Label>
+            <Input {...register("sourceLocation")} placeholder="e.g., Main St Coffee Shop" />
+          </div>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label>Send Frequency (weeks between touches)</Label>
         <Input {...register("sendFrequencyWeeks")} type="number" min={1} max={52} className="w-32" />

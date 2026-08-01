@@ -12,6 +12,8 @@ import { feedbackRouter } from "./routers/feedback";
 import { importExportRouter } from "./routers/import-export";
 import { digestRouter } from "./routers/digest";
 import { snoozeRouter } from "./routers/snooze";
+import { signaturesRouter } from "./routers/signatures";
+import { senderProfileRouter } from "./routers/senderProfile";
 
 export const appRouter = router({
   system: systemRouter,
@@ -34,7 +36,7 @@ export const appRouter = router({
   digest: digestRouter,
   snooze: snoozeRouter,
   signatures: signaturesRouter,
+  senderProfile: senderProfileRouter,
 });
 
 export type AppRouter = typeof appRouter;
-import { signaturesRouter } from "./routers/signatures";

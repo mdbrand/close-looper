@@ -160,6 +160,52 @@ export default function ContactDetail() {
           </div>
         </div>
 
+        {/* Relationship Journey */}
+        <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+          <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Relationship Journey</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Tier</span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                contact.relationshipTier === "hot" ? "bg-red-100 text-red-700" :
+                contact.relationshipTier === "warm" ? "bg-amber-100 text-amber-700" :
+                "bg-blue-100 text-blue-700"
+              }`}>{contact.relationshipTier?.charAt(0).toUpperCase() + contact.relationshipTier?.slice(1)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Loop Type</span>
+              <span className="text-xs font-medium">{
+                contact.loopType === "relationship_sequence" ? "Relationship Sequence" :
+                contact.loopType === "flexible_touchpoints" ? "Flexible Touchpoints" :
+                contact.loopType === "manual" ? "Manual" : "None"
+              }</span>
+            </div>
+            {contact.contactSource && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Source</span>
+                <span className="text-xs font-medium">{contact.contactSource.replace(/_/g, " ")}</span>
+              </div>
+            )}
+            {contact.dateFoundOrMet && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Date Found</span>
+                <span className="text-xs font-medium">{contact.dateFoundOrMet}</span>
+              </div>
+            )}
+          </div>
+          {contact.loopType === "relationship_sequence" && (
+            <div className="pt-2 border-t border-border">
+              <p className="text-xs text-muted-foreground mb-2">Sequence Progress</p>
+              <div className="flex gap-0.5">
+                {Array.from({ length: 12 }, (_, i) => (
+                  <div key={i} className={`h-2 flex-1 rounded-full ${i < 1 ? "bg-primary" : "bg-muted"}`} />
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Step 1 of 12 — First Impression</p>
+            </div>
+          )}
+        </div>
+
         {/* Loop Control */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-3">
           <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Loop Control</h3>

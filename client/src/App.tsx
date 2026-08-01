@@ -59,6 +59,7 @@ function AppRoutes() {
         <Route path="/calendar" component={CalendarPage} />
         <Route path="/settings" component={Settings} />
         <Route path="/voice-setup" component={VoiceSetup} />
+        <Route path="/sender-profile" component={SenderProfile} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
@@ -82,3 +83,4 @@ function App() {
 }
 
 export default App;
+import SenderProfile from "./pages/SenderProfile";
