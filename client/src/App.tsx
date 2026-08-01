@@ -5,6 +5,7 @@ import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
+import Welcome from "./pages/Welcome";
 import Contacts from "./pages/Contacts";
 import ContactDetail from "./pages/ContactDetail";
 import Queue from "./pages/Queue";
@@ -61,6 +62,7 @@ function AppShell() {
     <AuthGate>
       <DashboardLayout>
         <Switch>
+          <Route path="/welcome" component={Welcome} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/contacts" component={Contacts} />
           <Route path="/contacts/:id" component={ContactDetail} />

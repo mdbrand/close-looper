@@ -18,6 +18,7 @@ import { publicRouter, adminRouter } from "./routers/public";
 import { sequencesRouter } from "./routers/sequences";
 import { scanRouter } from "./routers/scan";
 import { usageRouter } from "./routers/usage";
+import { onboardingRouter } from "./routers/onboarding";
 
 export const appRouter = router({
   system: systemRouter,
@@ -46,6 +47,7 @@ export const appRouter = router({
   sequences: sequencesRouter,
   scan: scanRouter,
   usage: usageRouter,
+  onboarding: onboardingRouter,
 });
 
 export type AppRouter = typeof appRouter;
