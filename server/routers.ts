@@ -37,6 +37,8 @@ export const appRouter = router({
   snooze: snoozeRouter,
   signatures: signaturesRouter,
   senderProfile: senderProfileRouter,
+  sequences: sequencesRouter,
 });
 
 export type AppRouter = typeof appRouter;
+import { sequencesRouter } from "./routers/sequences";

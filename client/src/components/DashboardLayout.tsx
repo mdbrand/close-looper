@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Inbox, CalendarDays, Settings, Zap, UserCircle } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Inbox, CalendarDays, Settings, Zap, UserCircle, GitBranch } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -32,6 +32,7 @@ const menuItems = [
   { icon: Users, label: "Contacts", path: "/contacts" },
   { icon: Inbox, label: "Approval Queue", path: "/queue" },
   { icon: CalendarDays, label: "Calendar", path: "/calendar" },
+  { icon: GitBranch, label: "Sequences", path: "/sequences" },
   { icon: UserCircle, label: "Sender Profile", path: "/sender-profile" },
   { icon: Settings, label: "Settings", path: "/settings" },
 ];

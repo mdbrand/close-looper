@@ -12,6 +12,7 @@ import CalendarPage from "./pages/CalendarPage";
 import Settings from "./pages/Settings";
 import VoiceSetup from "./pages/VoiceSetup";
 import DashboardLayout from "./components/DashboardLayout";
+import Sequences from "./pages/Sequences";
 import { useAuth } from "./_core/hooks/useAuth";
 import { startLogin } from "./const";
 import { Loader2 } from "lucide-react";
@@ -60,6 +61,7 @@ function AppRoutes() {
         <Route path="/settings" component={Settings} />
         <Route path="/voice-setup" component={VoiceSetup} />
         <Route path="/sender-profile" component={SenderProfile} />
+        <Route path="/sequences" component={Sequences} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
