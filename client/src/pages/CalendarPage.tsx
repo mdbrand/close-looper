@@ -31,6 +31,13 @@ export default function CalendarPage() {
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("09:00");
+  const [isEditing, setIsEditing] = useState(false);
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const editMutation = trpc.drafts.edit.useMutation({
+    onSuccess: () => { toast.success("Email updated"); setIsEditing(false); },
+    onError: (e: any) => toast.error(e?.message || "Failed to update"),
+  });
 
   const startDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1), [currentDate]);
   const endDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59), [currentDate]);
@@ -173,7 +180,15 @@ export default function CalendarPage() {
       <Dialog open={!!selectedDraft} onOpenChange={v => !v && setSelectedDraft(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-serif text-xl">{selectedDraft?.subject}</DialogTitle>
+            <DialogTitle className="font-serif text-xl">
+              {isEditing ? (
+                <input
+                  value={editSubject}
+                  onChange={e => setEditSubject(e.target.value)}
+                  className="w-full px-2 py-1 border border-border rounded text-lg font-serif bg-background"
+                />
+              ) : selectedDraft?.subject}
+            </DialogTitle>
           </DialogHeader>
           {selectedDraft && (
             <div className="space-y-4">
@@ -181,13 +196,50 @@ export default function CalendarPage() {
                 <span className="text-sm text-muted-foreground">To:</span>
                 <span className="text-sm font-medium">{selectedDraft.contact?.firstName} {selectedDraft.contact?.lastName}</span>
                 <span className={`text-xs px-2 py-0.5 rounded-full badge-${selectedDraft.status}`}>{selectedDraft.status}</span>
+                {selectedDraft.status !== "sent" && !isEditing && (
+                  <button
+                    className="text-xs text-primary hover:underline ml-auto"
+                    onClick={() => { setIsEditing(true); setEditSubject(selectedDraft.subject); setEditBody(selectedDraft.body); }}
+                  >
+                    Edit
+                  </button>
+                )}
               </div>
               {selectedDraft.touchpointName && (
                 <p className="text-sm text-muted-foreground">Touchpoint: <span className="font-medium text-foreground">{selectedDraft.touchpointName}</span></p>
               )}
-              <div className="bg-muted/40 rounded-lg p-4">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedDraft.body}</p>
-              </div>
+              {isEditing ? (
+                <textarea
+                  value={editBody}
+                  onChange={e => setEditBody(e.target.value)}
+                  rows={8}
+                  className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background resize-y leading-relaxed"
+                />
+              ) : (
+                <div className="bg-muted/40 rounded-lg p-4">
+                  <p className="text-sm leading-relaxed whitespace-pre-wrap">{selectedDraft.body}</p>
+                </div>
+              )}
+              {isEditing && (
+                <div className="flex gap-2">
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      editMutation.mutate({ id: selectedDraft.id, subject: editSubject, body: editBody }, {
+                        onSuccess: () => {
+                          setSelectedDraft({ ...selectedDraft, subject: editSubject, body: editBody });
+                        }
+                      });
+                    }}
+                    disabled={editMutation.isPending}
+                  >
+                    {editMutation.isPending ? "Saving..." : "Save Changes"}
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => setIsEditing(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
               {selectedDraft.status !== "sent" && (

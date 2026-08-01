@@ -209,7 +209,7 @@ export const draftsRouter = router({
       const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p><br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;"><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
       
       const emailLines = [
-        `From: ${gmailAccount.gmailAddress}`,
+        `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
         `To: ${contact.email}`,
         `Subject: ${draft.subject}`,
         `MIME-Version: 1.0`,
@@ -291,7 +291,7 @@ export const draftsRouter = router({
 
       const gmail = google.gmail({ version: "v1", auth: oauth2Client });
       const emailLines = [
-        `From: ${gmailAccount.gmailAddress}`,
+        `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
         `To: ${contact.email}`,
         `Subject: ${draft.subject}`,
         `MIME-Version: 1.0`,

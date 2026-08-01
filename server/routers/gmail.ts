@@ -20,6 +20,20 @@ export const gmailRouter = router({
     return { success: true };
   }),
 
+  updateSenderName: protectedProcedure
+    .input(z.object({ id: z.number(), senderName: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { getDb } = await import("../db");
+      const database = await getDb();
+      if (!database) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { gmailAccounts } = await import("../../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      await database.update(gmailAccounts)
+        .set({ senderName: input.senderName || null })
+        .where(and(eq(gmailAccounts.id, input.id), eq(gmailAccounts.userId, ctx.user.id)));
+      return { success: true };
+    }),
+
   // Returns the OAuth URL for connecting a Gmail account
   getAuthUrl: protectedProcedure.query(async ({ ctx }) => {
     const { google } = await import("googleapis");

@@ -25,6 +25,10 @@ export default function Settings() {
     onSuccess: () => { toast.success("Account disconnected"); refetchGmail(); },
     onError: (e) => toast.error(e.message),
   });
+  const updateSenderNameMutation = trpc.gmail.updateSenderName.useMutation({
+    onSuccess: () => { toast.success("Sender name updated"); refetchGmail(); },
+    onError: (e) => toast.error(e.message),
+  });
   const seedMutation = trpc.touchpoints.seed.useMutation({
     onSuccess: (data) => toast.success(`Seeded ${data.seeded} touchpoints!`),
     onError: (e) => toast.error(e.message),
@@ -81,10 +85,17 @@ export default function Settings() {
                   {account.gmailAddress.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{account.gmailAddress}</p>
+                  <p className="text-sm font-medium truncate">{account.senderName ? `${account.senderName} (${account.gmailAddress})` : account.gmailAddress}</p>
+                  {!account.senderName && <p className="text-xs text-amber-600">Set a sender name below</p>}
                   {account.isDefault && <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Default account</p>}
                 </div>
                 <div className="flex gap-1.5">
+                  <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => {
+                    const name = prompt("Enter sender name (e.g., Rob Cooley):", account.senderName || "");
+                    if (name !== null) updateSenderNameMutation.mutate({ id: account.id, senderName: name });
+                  }}>
+                    Edit Name
+                  </Button>
                   {!account.isDefault && (
                     <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => setDefaultMutation.mutate({ id: account.id })}>
                       <Star className="w-3 h-3" /> Set default

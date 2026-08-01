@@ -43,6 +43,7 @@ export const gmailAccounts = mysqlTable("gmail_accounts", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
   gmailAddress: varchar("gmailAddress", { length: 320 }).notNull(),
+  senderName: varchar("senderName", { length: 200 }),
   accessToken: text("accessToken").notNull(),
   refreshToken: text("refreshToken"),
   tokenExpiry: bigint("tokenExpiry", { mode: "number" }),
