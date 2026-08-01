@@ -57,5 +57,42 @@ export const signaturesRouter = router({
     const result = await db.select().from(emailSignatures).where(and(eq(emailSignatures.userId, ctx.user.id), eq(emailSignatures.isDefault, true))).limit(1);
     return result[0] ?? null;
   }),
-});
 
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    const db = await getDb();
+    if (!db) return [];
+    const sigs = await db.select().from(emailSignatures).where(eq(emailSignatures.userId, ctx.user.id));
+    return sigs.map(s => ({
+      id: s.id,
+      name: s.name,
+      sendCount: s.sendCount,
+      replyCount: s.replyCount,
+      replyRate: s.sendCount > 0 ? Math.round((s.replyCount / s.sendCount) * 100) : 0,
+      isDefault: s.isDefault,
+    }));
+  }),
+
+  incrementSendCount: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { sql } = await import("drizzle-orm");
+      await db.update(emailSignatures)
+        .set({ sendCount: sql`${emailSignatures.sendCount} + 1` })
+        .where(and(eq(emailSignatures.id, input.id), eq(emailSignatures.userId, ctx.user.id)));
+      return { success: true };
+    }),
+
+  incrementReplyCount: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { sql } = await import("drizzle-orm");
+      await db.update(emailSignatures)
+        .set({ replyCount: sql`${emailSignatures.replyCount} + 1` })
+        .where(and(eq(emailSignatures.id, input.id), eq(emailSignatures.userId, ctx.user.id)));
+      return { success: true };
+    }),
+});

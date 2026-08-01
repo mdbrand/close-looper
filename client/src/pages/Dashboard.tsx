@@ -27,6 +27,7 @@ export default function Dashboard() {
   const { data: needsAttention, isLoading: attentionLoading } = trpc.analytics.needsAttention.useQuery();
   const { data: pendingDrafts } = trpc.drafts.list.useQuery({ status: "pending" });
   const { data: topEngaged } = trpc.analytics.topEngaged.useQuery();
+  const { data: sigStats } = trpc.signatures.stats.useQuery();
   const { data: voiceProfile } = trpc.voice.get.useQuery();
 
   return (
@@ -163,6 +164,28 @@ export default function Dashboard() {
                 <div className="text-right">
                   <p className="text-sm font-semibold text-amber-600">{item.totalOpens}</p>
                   <p className="text-xs text-muted-foreground">opens</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Signature A/B Testing */}
+      {sigStats && sigStats.length > 1 && (
+        <div className="bg-card border border-border rounded-xl p-5 mb-6">
+          <h3 className="font-semibold flex items-center gap-2 mb-4"><Star className="w-4 h-4 text-primary" /> Signature A/B Performance</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {sigStats.map((sig: any) => (
+              <div key={sig.id} className={`border rounded-lg p-3 ${sig.isDefault ? "border-primary/30 bg-primary/5" : "border-border"}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm font-medium">{sig.name}</p>
+                  {sig.isDefault && <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Default</span>}
+                </div>
+                <div className="flex gap-4 text-xs text-muted-foreground">
+                  <span>{sig.sendCount} sent</span>
+                  <span>{sig.replyCount} replies</span>
+                  <span className="font-medium text-foreground">{sig.replyRate}% reply rate</span>
                 </div>
               </div>
             ))}

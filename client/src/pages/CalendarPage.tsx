@@ -240,6 +240,12 @@ export default function CalendarPage() {
                   </Button>
                 </div>
               )}
+              {defaultSignature && selectedDraft.status !== "sent" && !isEditing && (
+                <div className="border-t border-dashed border-border pt-3">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Signature: {defaultSignature.name}</p>
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{defaultSignature.content}</p>
+                </div>
+              )}
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
               {selectedDraft.status !== "sent" && (
@@ -346,3 +352,4 @@ export default function CalendarPage() {
     </div>
   );
 }
+  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();

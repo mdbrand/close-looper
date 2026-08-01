@@ -33,6 +33,12 @@ export default function ContactDetail() {
 
   const contactDrafts = (drafts ?? []).filter(d => d.contactId === contactId);
 
+  const { data: signatures } = trpc.signatures.list.useQuery();
+  const updateContactSigMutation = trpc.contacts.update.useMutation({
+    onSuccess: () => { toast.success("Signature updated"); refetch(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const setStatusMutation = trpc.contacts.setLoopStatus.useMutation({
     onSuccess: () => { toast.success("Status updated"); refetch(); },
     onError: (e) => toast.error(e.message),
@@ -83,6 +89,20 @@ export default function ContactDetail() {
             </span>
           </div>
           {contact.company && <p className="text-muted-foreground mt-1">{contact.company} {contact.industry && `· ${contact.industry.replace("_", " ")}`}</p>}
+          {signatures && signatures.length > 0 && (
+            <div className="mt-2">
+              <select
+                value={contact.signatureId ?? ""}
+                onChange={e => updateContactSigMutation.mutate({ id: contact.id, signatureId: e.target.value ? Number(e.target.value) : null })}
+                className="px-2 py-1 text-xs border border-border rounded bg-background text-muted-foreground"
+              >
+                <option value="">Default signature</option>
+                {signatures.map((sig: any) => (
+                  <option key={sig.id} value={sig.id}>{sig.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowEdit(true)} className="gap-1.5">

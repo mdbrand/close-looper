@@ -78,6 +78,7 @@ export const contacts = mysqlTable("contacts", {
   lastTouchSentAt: timestamp("lastTouchSentAt"),
   nextTouchScheduledAt: timestamp("nextTouchScheduledAt"),
   snoozeUntil: timestamp("snoozeUntil"), // null = not snoozed, timestamp = resume date
+  signatureId: int("signatureId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -182,6 +183,8 @@ export const emailSignatures = mysqlTable("email_signatures", {
   name: varchar("name", { length: 200 }).notNull(),
   content: text("content").notNull(),
   isDefault: boolean("isDefault").default(false).notNull(),
+  sendCount: int("sendCount").default(0).notNull(),
+  replyCount: int("replyCount").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

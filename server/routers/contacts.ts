@@ -58,6 +58,7 @@ export const contactsRouter = router({
     loopStatus: z.enum(["active", "paused", "archived"]).optional(),
     sendFrequencyWeeks: z.number().int().min(1).max(52).optional(),
     tags: z.array(z.string()).optional(),
+    signatureId: z.number().nullable().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, tags, ...rest } = input;
     await db.updateContact(id, ctx.user.id, {
