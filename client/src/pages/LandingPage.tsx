@@ -85,7 +85,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { icon: <Users className="w-6 h-6" />, title: "Contact Database", desc: "Add your referral partners with full profiles — industry, notes, social links, how you met. The more context you give, the more personal the emails." },
-              { icon: <Zap className="w-6 h-6" />, title: "AI Email Generation", desc: "The AI writes in your voice — casual, no fluff, 7th-grade reading level. Tied to a real moment: National Relaxation Day, a construction industry milestone, their kid's graduation." },
+              { icon: <Zap className="w-6 h-6" />, title: "AI Hybrid Email Copy", desc: "AI tailors the copy to fit your specific voice and tone — casual, no fluff, 7th-grade reading level. Tied to a real moment: a holiday, an industry milestone, or something personal to them." },
               { icon: <Mail className="w-6 h-6" />, title: "Approval Queue", desc: "Every draft lands in your queue first. Review, edit, or skip in seconds. You're always in control of what goes out." },
               { icon: <Calendar className="w-6 h-6" />, title: "Calendar View", desc: "See every email scheduled, sent, and opened on a clean calendar. Click any email to view, edit, or send it immediately." },
               { icon: <Star className="w-6 h-6" />, title: "Open Tracking", desc: "Know exactly who opened your emails and when. The dashboard shows your open rate, active contacts, and who needs attention." },
