@@ -52,6 +52,23 @@ Do not include any explanation or markdown. Return only the JSON object.`,
         // Strip markdown code blocks if present
         const clean = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
         const parsed = JSON.parse(clean);
+        // Auto-detect industry from company name if not found in image
+        let industry = parsed.industry ?? "";
+        if (!industry && parsed.company) {
+          try {
+            const industryResult = await invokeLLM({
+              model: "auto",
+              messages: [{
+                role: "user",
+                content: `Given the company name "${parsed.company}", what industry are they in? Reply with ONLY one of these exact values: construction, real_estate, healthcare, finance, marketing, legal, technology, education, other. No explanation.`
+              }]
+            });
+            const raw = industryResult.choices?.[0]?.message?.content ?? "";
+            const inferredIndustry = (typeof raw === "string" ? raw : "").trim().toLowerCase();
+            const validIndustries = ["construction", "real_estate", "healthcare", "finance", "marketing", "legal", "technology", "education", "other"];
+            if (validIndustries.includes(inferredIndustry)) industry = inferredIndustry;
+          } catch { /* ignore industry detection failure */ }
+        }
         return {
           success: true,
           data: {
@@ -60,7 +77,7 @@ Do not include any explanation or markdown. Return only the JSON object.`,
             email: parsed.email ?? "",
             phone: parsed.phone ?? "",
             company: parsed.company ?? "",
-            industry: parsed.industry ?? "",
+            industry,
             linkedinUrl: parsed.linkedinUrl ?? "",
             notes: parsed.notes ?? (parsed.title ? `Title: ${parsed.title}` : ""),
             sourceUrl: parsed.websiteUrl ?? "",

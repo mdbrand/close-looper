@@ -40,13 +40,22 @@ export default function Contacts() {
   const [showScanModal, setShowScanModal] = useState(false);
   const [scanPreview, setScanPreview] = useState<any>(null);
   const [scanImageUrl, setScanImageUrl] = useState<string>("");
+  const [scanCount, setScanCount] = useState(0);
+  const [showScanAnother, setShowScanAnother] = useState(false);
 
   const scanMutation = trpc.scan.extractContactFromImage.useMutation({
     onSuccess: (data: any) => { setScanPreview(data.data); },
     onError: (e: any) => toast.error(e.message || "Could not read image. Try a clearer photo."),
   });
   const createFromScanMutation = trpc.contacts.create.useMutation({
-    onSuccess: () => { toast.success("Contact added from scan!"); setShowScanModal(false); setScanPreview(null); setScanImageUrl(""); refetch(); },
+    onSuccess: () => {
+      toast.success("Contact added!");
+      setScanCount(c => c + 1);
+      setScanPreview(null);
+      setScanImageUrl("");
+      setShowScanAnother(true);
+      refetch();
+    },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -328,6 +337,24 @@ export default function Contacts() {
                 </div>
               </div>
             )}
+            {/* Scan Another success state */}
+            {showScanAnother && !scanPreview && !scanMutation.isPending && (
+              <div className="text-center py-6 space-y-4">
+                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-7 h-7 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">{scanCount} contact{scanCount !== 1 ? "s" : ""} added this session</p>
+                  <p className="text-sm text-muted-foreground mt-1">Ready to scan another card?</p>
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" onClick={() => { setShowScanModal(false); setScanCount(0); setShowScanAnother(false); }}>Done</Button>
+                  <Button onClick={() => { setShowScanAnother(false); setScanImageUrl(""); }} className="gap-2">
+                    <Camera className="w-4 h-4" /> Scan Another Card
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -432,9 +459,36 @@ export default function Contacts() {
                 </div>
               </div>
             )}
+            {/* Scan Another success state */}
+            {showScanAnother && !scanPreview && !scanMutation.isPending && (
+              <div className="text-center py-6 space-y-4">
+                <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-7 h-7 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-medium">{scanCount} contact{scanCount !== 1 ? "s" : ""} added this session</p>
+                  <p className="text-sm text-muted-foreground mt-1">Ready to scan another card?</p>
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <Button variant="outline" onClick={() => { setShowScanModal(false); setScanCount(0); setShowScanAnother(false); }}>Done</Button>
+                  <Button onClick={() => { setShowScanAnother(false); setScanImageUrl(""); }} className="gap-2">
+                    <Camera className="w-4 h-4" /> Scan Another Card
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Mobile FAB for quick scan */}
+      <button
+        className="fixed bottom-6 right-6 md:hidden w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg flex items-center justify-center z-50 hover:bg-primary/90 transition-colors"
+        onClick={() => { setShowScanAnother(false); setShowScanModal(true); }}
+        aria-label="Scan business card"
+      >
+        <Camera className="w-6 h-6" />
+      </button>
     </div>
   );
 }
