@@ -56,6 +56,9 @@ export function registerOAuthRoutes(app: Express) {
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
+      // The client saves the intended URL in sessionStorage before redirecting
+      // to login. After OAuth completes we land at /dashboard; the client-side
+      // redirect effect in SignInPage picks up the saved URL and navigates there.
       res.redirect(302, "/dashboard");
     } catch (error) {
       console.error("[OAuth] Callback failed", error);

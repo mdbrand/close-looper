@@ -1,19 +1,34 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { startLogin } from "@/const";
 import { toast } from "sonner";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function SignInPage() {
+  const { isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
   const [showForgot, setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotSent, setForgotSent] = useState(false);
 
+  // After OAuth completes, redirect to the originally-intended URL if saved
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      const intended = sessionStorage.getItem("cl-redirect-after-login");
+      if (intended) {
+        sessionStorage.removeItem("cl-redirect-after-login");
+        navigate(intended);
+      } else {
+        navigate("/dashboard");
+      }
+    }
+  }, [isAuthenticated, loading]);
+
   const handleForgot = () => {
     if (!forgotEmail) { toast.error("Please enter your email address."); return; }
-    // Placeholder — will be wired to backend when password auth is added
     setForgotSent(true);
     toast.success("If that email is in our system, you'll receive a reset link shortly.");
   };
@@ -77,4 +92,3 @@ export default function SignInPage() {
     </div>
   );
 }
-

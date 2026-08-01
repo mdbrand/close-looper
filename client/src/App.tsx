@@ -30,7 +30,6 @@ const PUBLIC_PATHS = ["/", "/signup", "/signin", "/terms", "/privacy"];
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
-  const [location] = useLocation();
 
   if (loading) {
     return (
@@ -40,8 +39,12 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
   if (!isAuthenticated) {
-    // Redirect to signin for protected routes
     if (typeof window !== "undefined") {
+      // Save the intended URL so we can redirect back after login
+      const intended = window.location.pathname + window.location.search;
+      if (intended !== "/signin" && intended !== "/") {
+        sessionStorage.setItem("cl-redirect-after-login", intended);
+      }
       window.location.href = "/signin";
     }
     return (

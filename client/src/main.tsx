@@ -18,6 +18,11 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  // Save intended URL before redirecting to login
+  const intended = window.location.pathname + window.location.search;
+  if (intended !== "/signin" && intended !== "/") {
+    sessionStorage.setItem("cl-redirect-after-login", intended);
+  }
   startLogin();
 };
 

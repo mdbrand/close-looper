@@ -7,6 +7,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
@@ -120,6 +130,7 @@ function DashboardLayoutContent({
   const isMobile = useIsMobile();
   const adminMenuItem = user?.role === "admin" ? { icon: ShieldCheck, label: "Admin", path: "/admin" } : null;
   const allMenuItems = adminMenuItem ? [...menuItems, adminMenuItem] : menuItems;
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
 
   useEffect(() => {
     if (isCollapsed) {
@@ -228,7 +239,7 @@ function DashboardLayoutContent({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem
-                  onClick={logout}
+                  onClick={() => setShowSignOutDialog(true)}
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
@@ -238,6 +249,26 @@ function DashboardLayoutContent({
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
+
+        <AlertDialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Sign out of Close Looper?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You'll need to sign back in to access your dashboard and contacts.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={logout}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Sign out
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <div
           className={`absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/20 transition-colors ${isCollapsed ? "hidden" : ""}`}
           onMouseDown={() => {
