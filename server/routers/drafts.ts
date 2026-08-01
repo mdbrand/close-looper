@@ -218,9 +218,13 @@ export const draftsRouter = router({
       const database = await db.getDb();
       let signatureHtml = "";
       if (database) {
-        const sigs = await database.select().from(emailSignatures).where(andOp(eqOp(emailSignatures.userId, ctx.user.id), eqOp(emailSignatures.isDefault, true))).limit(1);
-        if (sigs[0]) {
-          signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
+        // Try default signature first, fall back to any signature
+        let sigs = await database.select().from(emailSignatures).where(andOp(eqOp(emailSignatures.userId, ctx.user.id), eqOp(emailSignatures.isDefault, 1 as unknown as boolean))).limit(1);
+        if (!sigs[0]) {
+          sigs = await database.select().from(emailSignatures).where(eqOp(emailSignatures.userId, ctx.user.id)).limit(1);
+        }
+        if (sigs[0]?.content) {
+          signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;font-family:inherit;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
         }
       }
 
