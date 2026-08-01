@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { and, eq } from "drizzle-orm";
-import { contactSequenceEnrollments, emailSignatures, senderProfiles } from "../drizzle/schema";
+import { contactSequenceEnrollments, emailSignatures, senderProfiles, sequences } from "../drizzle/schema";
 import { notifyOwner } from "./_core/notification";
 import * as db from "./db";
 import { getAppUrl } from "./_core/env";
@@ -19,7 +19,21 @@ import { getAppUrl } from "./_core/env";
  * Anything that sends mail goes through here, so those guarantees hold once.
  */
 
-const SEQUENCE_TOTAL_STEPS = 12;
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function assertSafeHeader(value: string, label: string): string {
+  if (/\r|\n/.test(value)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: `${label} contains invalid characters` });
+  }
+  return value.trim();
+}
+
+function encodeSubject(value: string): string {
+  const safe = assertSafeHeader(value, "Subject");
+  return `=?UTF-8?B?${Buffer.from(safe, "utf8").toString("base64")}?=`;
+}
 
 /** Renders the CAN-SPAM footer and the open-tracking pixel onto a draft body. */
 async function buildHtmlBody(
@@ -47,18 +61,18 @@ async function buildHtmlBody(
       sigs = await database.select().from(emailSignatures).where(eq(emailSignatures.userId, userId)).limit(1);
     }
     if (sigs[0]?.content) {
-      signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;font-family:inherit;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
+      signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;font-family:inherit;">${escapeHtml(sigs[0].content).replace(/\n/g, "<br>")}</p>`;
     }
 
     // CAN-SPAM requires a physical postal address on commercial mail.
     const profiles = await database.select().from(senderProfiles).where(eq(senderProfiles.userId, userId)).limit(1);
     if (profiles[0]?.mailingAddress) {
-      mailingAddress = `<p style="font-size:11px;color:#999;margin-top:4px;">${profiles[0].mailingAddress}</p>`;
+      mailingAddress = `<p style="font-size:11px;color:#999;margin-top:4px;">${escapeHtml(profiles[0].mailingAddress)}</p>`;
     }
   }
 
   return (
-    `<html><body><p>${body.replace(/\n/g, "<br>")}</p>${signatureHtml}` +
+    `<html><body><p>${escapeHtml(body).replace(/\n/g, "<br>")}</p>${signatureHtml}` +
     `<br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;">${mailingAddress}` +
     `<p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p>` +
     `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`
@@ -66,23 +80,27 @@ async function buildHtmlBody(
 }
 
 /** Moves a sequence enrollment to its next step, or completes it. */
-async function advanceSequence(enrollmentId: number): Promise<void> {
+async function advanceSequence(enrollmentId: number, userId: number): Promise<void> {
   const database = await db.getDb();
   if (!database) return;
 
   const [enrollment] = await database
     .select()
     .from(contactSequenceEnrollments)
-    .where(eq(contactSequenceEnrollments.id, enrollmentId))
+    .where(and(eq(contactSequenceEnrollments.id, enrollmentId), eq(contactSequenceEnrollments.userId, userId)))
     .limit(1);
   if (!enrollment) return;
 
+  const [sequence] = await database.select({ totalSteps: sequences.totalSteps }).from(sequences)
+    .where(and(eq(sequences.id, enrollment.sequenceId), eq(sequences.userId, userId))).limit(1);
+  if (!sequence) return;
+  const totalSteps = Math.max(sequence.totalSteps, 1);
   const nextStep = enrollment.currentStepNumber + 1;
-  if (nextStep > SEQUENCE_TOTAL_STEPS) {
+  if (nextStep > totalSteps) {
     await database
       .update(contactSequenceEnrollments)
-      .set({ status: "completed", completedAt: new Date(), currentStepNumber: SEQUENCE_TOTAL_STEPS })
-      .where(eq(contactSequenceEnrollments.id, enrollment.id));
+      .set({ status: "completed", completedAt: new Date(), currentStepNumber: totalSteps })
+      .where(and(eq(contactSequenceEnrollments.id, enrollment.id), eq(contactSequenceEnrollments.userId, userId)));
     return;
   }
 
@@ -98,19 +116,26 @@ async function advanceSequence(enrollmentId: number): Promise<void> {
   await database
     .update(contactSequenceEnrollments)
     .set({ currentStepNumber: nextStep, nextSendAt: nextDate })
-    .where(eq(contactSequenceEnrollments.id, enrollment.id));
+    .where(and(eq(contactSequenceEnrollments.id, enrollment.id), eq(contactSequenceEnrollments.userId, userId)));
 }
 
-export type SendResult = { success: true; messageId: string | null };
+export type SendResult = { success: true; messageId: string | null; reconciliationRequired?: boolean };
+export type SendOptions = { allowedStatuses?: Array<"pending" | "approved" | "failed"> };
 
 /**
  * Sends an already-vetted draft. Callers are responsible for their own
  * precondition (approved vs. send-now); everything after that is shared.
  */
-export async function sendDraft(draftId: number, userId: number): Promise<SendResult> {
+export async function sendDraft(draftId: number, userId: number, options: SendOptions = {}): Promise<SendResult> {
   const draft = await db.getEmailDraft(draftId, userId);
   if (!draft) throw new TRPCError({ code: "NOT_FOUND", message: "Draft not found" });
   if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
+  if (draft.status === "sending") throw new TRPCError({ code: "CONFLICT", message: "Email is already being sent" });
+
+  const allowedStatuses = options.allowedStatuses ?? ["approved"];
+  if (!allowedStatuses.includes(draft.status as (typeof allowedStatuses)[number])) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Draft is not ready to send" });
+  }
 
   const contact = await db.getContact(draft.contactId, userId);
   if (!contact) throw new TRPCError({ code: "NOT_FOUND", message: "Contact not found" });
@@ -134,6 +159,10 @@ export async function sendDraft(draftId: number, userId: number): Promise<SendRe
     });
   }
 
+  const claimed = await db.claimEmailDraft(draftId, userId, allowedStatuses);
+  if (!claimed) throw new TRPCError({ code: "CONFLICT", message: "Email was already claimed by another send request" });
+
+  let acceptedByGmail = false;
   try {
     const { google } = await import("googleapis");
     const oauth2Client = new google.auth.OAuth2(
@@ -171,11 +200,14 @@ export async function sendDraft(draftId: number, userId: number): Promise<SendRe
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
     const htmlBody = await buildHtmlBody(userId, draft.body, draft.trackingId);
 
+    const fromAddress = assertSafeHeader(gmailAccount.gmailAddress, "From address");
+    const senderName = gmailAccount.senderName ? assertSafeHeader(gmailAccount.senderName, "Sender name") : null;
+    const toAddress = assertSafeHeader(contact.email, "Recipient address");
     const raw = Buffer.from(
       [
-        `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
-        `To: ${contact.email}`,
-        `Subject: ${draft.subject}`,
+        `From: ${senderName ? `${senderName} <${fromAddress}>` : fromAddress}`,
+        `To: ${toAddress}`,
+        `Subject: ${encodeSubject(draft.subject)}`,
         `MIME-Version: 1.0`,
         `Content-Type: text/html; charset=utf-8`,
         ``,
@@ -184,18 +216,53 @@ export async function sendDraft(draftId: number, userId: number): Promise<SendRe
     ).toString("base64url");
 
     const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+    acceptedByGmail = true;
 
-    await db.updateEmailDraft(draftId, userId, {
-      status: "sent",
-      sentAt: new Date(),
-      gmailMessageId: sent.data.id ?? null,
-    });
-    await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
-    await db.updateContact(draft.contactId, userId, { lastTouchSentAt: new Date() });
+    let rfcMessageId: string | null = null;
+    if (sent.data.id) {
+      try {
+        const metadata = await gmail.users.messages.get({
+          userId: "me",
+          id: sent.data.id,
+          format: "metadata",
+          metadataHeaders: ["Message-ID"],
+        });
+        rfcMessageId = metadata.data.payload?.headers?.find(header => header.name?.toLowerCase() === "message-id")?.value ?? null;
+      } catch (metadataError) {
+        console.error("[sendDraft] Could not fetch sent-message metadata:", metadataError);
+      }
+    }
+
+    try {
+      await db.updateEmailDraft(draftId, userId, {
+        status: "sent",
+        sentAt: new Date(),
+        scheduledSendAt: null,
+        sendError: null,
+        gmailAccountId: gmailAccount.id,
+        gmailMessageId: sent.data.id ?? null,
+        gmailThreadId: sent.data.threadId ?? null,
+        gmailRfcMessageId: rfcMessageId,
+      });
+    } catch (reconciliationError) {
+      console.error("[sendDraft] Gmail accepted the message but the draft could not be finalized:", reconciliationError);
+      await notifyOwner({
+        title: "Email delivery needs reconciliation",
+        content: "Gmail accepted a Close Looper email, but its database status could not be finalized. Do not retry it automatically.",
+      }).catch(() => undefined);
+      return { success: true, messageId: sent.data.id ?? null, reconciliationRequired: true };
+    }
+
+    await db.createEmailEvent({ draftId: draft.id, eventType: "sent" }).catch(error =>
+      console.error("[sendDraft] Could not record sent event:", error)
+    );
+    await db.updateContact(draft.contactId, userId, { lastTouchSentAt: new Date() }).catch(error =>
+      console.error("[sendDraft] Could not update contact after send:", error)
+    );
 
     if (draft.sequenceEnrollmentId) {
       try {
-        await advanceSequence(draft.sequenceEnrollmentId);
+        await advanceSequence(draft.sequenceEnrollmentId, userId);
       } catch (seqErr) {
         // A send that succeeded must not be reported as failed because the
         // bookkeeping afterwards did not.
@@ -211,9 +278,14 @@ export async function sendDraft(draftId: number, userId: number): Promise<SendRe
 
     return { success: true, messageId: sent.data.id ?? null };
   } catch (err: any) {
-    if (err instanceof TRPCError) throw err;
     console.error("[sendDraft] Send failed:", err);
-    await db.updateEmailDraft(draftId, userId, { status: "failed" });
+    if (!acceptedByGmail) {
+      await db.updateEmailDraft(draftId, userId, {
+        status: "failed",
+        sendError: String(err?.message || "Unknown error").slice(0, 2000),
+      });
+    }
+    if (err instanceof TRPCError) throw err;
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
       message: `Send failed: ${err?.message || "Unknown error"}`,

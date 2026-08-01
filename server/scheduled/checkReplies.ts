@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { notifyOwner } from "../_core/notification";
 import * as db from "../db";
 import { flattenGmailBody, getHeader, parseBounce } from "../bounceParser";
+import { isReplyToDraft } from "../replyMatcher";
 
 /**
  * Suppresses an address that hard-bounced, and pauses the contact behind it.
@@ -64,12 +65,14 @@ export async function checkRepliesHandler(req: Request, res: Response) {
       const gmailAccounts = await db.getGmailAccounts(dbUser.id);
       if (!gmailAccounts.length) continue;
 
-      // Get all sent emails with Gmail message IDs
+      // Get all sent emails with a Gmail thread or RFC Message-ID.
       const sentDrafts = await db.getEmailDrafts(dbUser.id, "sent");
-      const draftsWithMessageId = sentDrafts.filter(d => d.gmailMessageId);
+      const draftsWithReplyIdentity = sentDrafts.filter(d => d.gmailThreadId || d.gmailRfcMessageId);
 
       for (const gmailAccount of gmailAccounts) {
         try {
+          const accountDrafts = draftsWithReplyIdentity.filter(d => d.gmailAccountId === gmailAccount.id);
+          if (!accountDrafts.length) continue;
           const { google } = await import("googleapis");
           const oauth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID,
@@ -118,14 +121,10 @@ export async function checkRepliesHandler(req: Request, res: Response) {
               continue;
             }
 
-            const inReplyTo = headers.find(h => h.name === "In-Reply-To")?.value;
-            const references = headers.find(h => h.name === "References")?.value;
-
-            // Check if this reply is to one of our sent emails
-            const matchedDraft = draftsWithMessageId.find(d => {
-              const msgId = `<${d.gmailMessageId}>`;
-              return inReplyTo?.includes(msgId) || references?.includes(msgId);
-            });
+            const matchedDraft = accountDrafts.find(d => isReplyToDraft({
+              threadId: fullMsg.threadId,
+              headers,
+            }, d));
 
             if (matchedDraft) {
               const contact = await db.getContact(matchedDraft.contactId, dbUser.id);

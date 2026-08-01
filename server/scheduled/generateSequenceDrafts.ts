@@ -1,14 +1,18 @@
-import { Router } from "express";
-import { getDb } from "../db";
+import { Router, type Request, type Response } from "express";
+import { applyFeedbackRules, getDb } from "../db";
 import { contactSequenceEnrollments, contacts, sequences, sequenceSteps, emailDrafts, senderProfiles, aiVoiceProfiles } from "../../drizzle/schema";
-import { eq, and, lte, sql } from "drizzle-orm";
+import { eq, and, lte, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { ENV } from "../_core/env";
+import { sdk } from "../_core/sdk";
 
 export const generateSequenceDraftsRouter = Router();
 
-generateSequenceDraftsRouter.post("/api/cron/generate-sequence-drafts", async (req, res) => {
+export async function generateSequenceDraftsHandler(req: Request, res: Response) {
   try {
+    const cronUser = await sdk.authenticateRequest(req);
+    if (!cronUser.isCron) return res.status(403).json({ error: "cron-only" });
+
     const db = await getDb();
     if (!db) return res.json({ success: false, error: "No database" });
 
@@ -27,16 +31,19 @@ generateSequenceDraftsRouter.post("/api/cron/generate-sequence-drafts", async (r
       // Check no pending draft already exists for this enrollment
       const existingDraft = await db.select().from(emailDrafts)
         .where(and(
+          eq(emailDrafts.userId, enrollment.userId),
           eq(emailDrafts.sequenceEnrollmentId, enrollment.id),
-          eq(emailDrafts.status, "pending")
+          inArray(emailDrafts.status, ["pending", "approved", "sending"])
         )).limit(1);
       if (existingDraft[0]) continue;
 
       // Get contact, sequence, step, sender profile, voice
-      const [contact] = await db.select().from(contacts).where(eq(contacts.id, enrollment.contactId)).limit(1);
+      const [contact] = await db.select().from(contacts)
+        .where(and(eq(contacts.id, enrollment.contactId), eq(contacts.userId, enrollment.userId))).limit(1);
       if (!contact) continue;
 
-      const [seq] = await db.select().from(sequences).where(eq(sequences.id, enrollment.sequenceId)).limit(1);
+      const [seq] = await db.select().from(sequences)
+        .where(and(eq(sequences.id, enrollment.sequenceId), eq(sequences.userId, enrollment.userId), eq(sequences.isActive, true))).limit(1);
       if (!seq) continue;
 
       const [step] = await db.select().from(sequenceSteps)
@@ -123,8 +130,9 @@ BODY: [email body]`;
           userId: enrollment.userId, contactId: enrollment.contactId, touchpointId: null,
           touchpointName: `${seq.name} - Step ${step.stepNumber}`, touchpointCategory: "relationship_sequence",
           sequenceStepId: step.id, sequenceEnrollmentId: enrollment.id, generationSource: "relationship_sequence",
-          subject, body, whyExplanation, status: "pending", trackingId,
+          subject, body, whyExplanation, status: "pending", trackingId, scheduledSendAt: enrollment.nextSendAt,
         });
+        generated++;
         continue;
       }
       try {
@@ -141,7 +149,8 @@ BODY: [email body]`;
         const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
 
         const subject = subjectMatch?.[1]?.trim() ?? `Step ${step.stepNumber}: ${step.internalName}`;
-        const body = bodyMatch?.[1]?.trim() ?? text;
+        const rawBody = bodyMatch?.[1]?.trim() ?? text;
+        const { text: body } = await applyFeedbackRules(rawBody, enrollment.userId);
 
         const trackingId = nanoid(32);
         const whyExplanation = `Sequence: ${seq.name} · Step ${step.stepNumber} · ${step.internalName} — ${step.relationshipObjective}`;
@@ -172,6 +181,10 @@ BODY: [email body]`;
     res.json({ success: true, generated, checked: dueEnrollments.length });
   } catch (err) {
     console.error("[SequenceDrafts] Error:", err);
-    res.status(500).json({ success: false, error: String(err) });
+    res.status(500).json({ success: false, error: "Sequence draft generation failed" });
   }
-});
+}
+
+generateSequenceDraftsRouter.post("/api/scheduled/generateSequenceDrafts", generateSequenceDraftsHandler);
+// Keep the previous callback alive while Manus is switched to the canonical path.
+generateSequenceDraftsRouter.post("/api/cron/generate-sequence-drafts", generateSequenceDraftsHandler);

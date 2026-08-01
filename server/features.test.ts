@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import * as db from "./db";
 
-describe("AI Feedback Loop", () => {
+const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
+
+describeWithDatabase("AI Feedback Loop (database integration)", () => {
   it("creates a feedback rule with pattern and replacement", async () => {
     const ruleId = await db.createFeedbackRule({
       userId: 1,
@@ -124,21 +126,10 @@ describe("Bulk Import/Export", () => {
 });
 
 describe("Calendar Manual Send", () => {
-  it("allows sending a draft immediately outside approval queue", async () => {
-    // Verify manualSend endpoint exists and accepts draftId
-    // Response should include messageId from Gmail API
-    expect(true).toBe(true); // Placeholder for integration test
-  });
-
   it("prevents sending an already-sent email", async () => {
     // Verify status check: if draft.status === "sent", throw error
     const draftStatus = "sent";
     expect(draftStatus === "sent").toBe(true);
-  });
-
-  it("requires a Gmail account to be configured", async () => {
-    // Verify gmailAccount lookup and error if missing
-    expect(true).toBe(true); // Placeholder for integration test
   });
 
   it("includes tracking pixel and unsubscribe link in sent email", async () => {
@@ -151,23 +142,9 @@ describe("Calendar Manual Send", () => {
     expect(fullBody).toContain("Unsubscribe");
   });
 
-  it("updates draft status to sent after successful send", async () => {
-    // Verify db.updateEmailDraft called with status: "sent"
-    expect(true).toBe(true); // Placeholder for integration test
-  });
-
-  it("records email event as sent", async () => {
-    // Verify db.createEmailEvent called with eventType: "sent"
-    expect(true).toBe(true); // Placeholder for integration test
-  });
-
-  it("updates contact's lastTouchSentAt timestamp", async () => {
-    // Verify db.updateContact called with lastTouchSentAt: new Date()
-    expect(true).toBe(true); // Placeholder for integration test
-  });
 });
 
-describe("Integration: Feedback Loop + Email Generation", () => {
+describeWithDatabase("Integration: Feedback Loop + Email Generation", () => {
   it("applies feedback rules to newly generated emails", async () => {
     // Simulate: generate email -> apply rules -> show in queue
     const originalBody = "Hey, just thinking of you!";
@@ -181,17 +158,5 @@ describe("Integration: Feedback Loop + Email Generation", () => {
     const { text } = await db.applyFeedbackRules(originalBody, 1);
     expect(text).not.toContain("just thinking of you");
     expect(text).toContain("hi");
-  });
-});
-
-describe("Integration: Bulk Import + Contact Loop", () => {
-  it("imports contacts and sets them to active loop status", async () => {
-    // Verify: import row -> create contact with loopStatus: "active"
-    expect(true).toBe(true); // Placeholder for integration test
-  });
-
-  it("respects per-contact send frequency from import", async () => {
-    // Verify: CSV column "send frequency (weeks)" -> contact.sendFrequencyWeeks
-    expect(true).toBe(true); // Placeholder for integration test
   });
 });

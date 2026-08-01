@@ -21,7 +21,7 @@ export const digestRouter = router({
     const nextWeekStart = new Date();
     const nextWeekEnd = new Date(nextWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     const upcomingDrafts = allDrafts.filter(d => 
-      d.status === "pending" && d.scheduledSendAt &&
+      d.status === "approved" && d.scheduledSendAt &&
       new Date(d.scheduledSendAt) >= nextWeekStart &&
       new Date(d.scheduledSendAt) <= nextWeekEnd
     );

@@ -13,6 +13,7 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
   approved: "bg-green-100 text-green-700",
+  sending: "bg-purple-100 text-purple-700",
   sent: "bg-blue-100 text-blue-700",
   skipped: "bg-gray-100 text-gray-500",
   failed: "bg-red-100 text-red-700",
@@ -262,7 +263,7 @@ export default function CalendarPage() {
               )}
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
-              {selectedDraft.status !== "sent" && (
+              {["pending", "approved", "failed"].includes(selectedDraft.status) && (
                 <div className="flex gap-2 mt-4">
                   <Button
                     onClick={() => setConfirmSendDraft(selectedDraft)}
@@ -280,12 +281,12 @@ export default function CalendarPage() {
                   </Button>
                 </div>
               )}
-              {selectedDraft.scheduledSendAt && selectedDraft.status !== "sent" && (
+              {selectedDraft.scheduledSendAt && ["pending", "approved", "failed"].includes(selectedDraft.status) && (
                 <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3 mt-2">
                   <p className="text-xs text-blue-700">Scheduled: {new Date(selectedDraft.scheduledSendAt).toLocaleString()}</p>
                   <button
                     className="text-xs text-red-600 hover:text-red-700 font-medium"
-                    onClick={() => { scheduleMutation.mutate({ id: selectedDraft.id, scheduledSendAt: null as any }); }}
+                    onClick={() => { scheduleMutation.mutate({ id: selectedDraft.id, scheduledSendAt: null }); }}
                   >
                     Cancel
                   </button>

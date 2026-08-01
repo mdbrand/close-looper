@@ -172,32 +172,49 @@ export const importExportRouter = router({
   }),
 
   bulkEnrollInSequence: protectedProcedure
-    .input(z.object({ contactIds: z.array(z.number()), sequenceId: z.number() }))
+    .input(z.object({ contactIds: z.array(z.number()).max(1000), sequenceId: z.number() }))
     .mutation(async ({ ctx, input }) => {
-      const { contactSequenceEnrollments, contacts } = await import("../../drizzle/schema");
-      const { eq, and } = await import("drizzle-orm");
+      const { contactSequenceEnrollments, contacts, sequences } = await import("../../drizzle/schema");
+      const { eq, and, inArray } = await import("drizzle-orm");
       const database = await db.getDb();
       if (!database) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const [ownedSequence] = await database.select({ id: sequences.id }).from(sequences)
+        .where(and(eq(sequences.id, input.sequenceId), eq(sequences.userId, ctx.user.id), eq(sequences.isActive, true)))
+        .limit(1);
+      if (!ownedSequence) throw new TRPCError({ code: "NOT_FOUND", message: "Sequence not found" });
+      if (input.contactIds.length === 0) return { enrolled: 0, skipped: 0 };
+
+      const requestedIds = Array.from(new Set(input.contactIds));
+      const ownedContacts = await database.select({ id: contacts.id }).from(contacts)
+        .where(and(eq(contacts.userId, ctx.user.id), inArray(contacts.id, requestedIds)));
+      const ownedIds = new Set(ownedContacts.map(contact => contact.id));
+      const activeEnrollments = await database.select({ contactId: contactSequenceEnrollments.contactId })
+        .from(contactSequenceEnrollments)
+        .where(and(
+          eq(contactSequenceEnrollments.userId, ctx.user.id),
+          eq(contactSequenceEnrollments.status, "active"),
+          inArray(contactSequenceEnrollments.contactId, requestedIds)
+        ));
+      const alreadyActive = new Set(activeEnrollments.map(enrollment => enrollment.contactId));
       let enrolled = 0;
       const now = new Date();
-      for (const contactId of input.contactIds) {
-        try {
-          const day = now.getDate();
-          let sendDate = new Date(now.getFullYear(), now.getMonth(), 15, 10, 0, 0);
-          if (day > 10) sendDate = new Date(now.getFullYear(), now.getMonth() + 1, 15, 10, 0, 0);
-          const dow = sendDate.getDay();
-          if (dow === 6) sendDate.setDate(sendDate.getDate() + 3);
-          else if (dow === 0) sendDate.setDate(sendDate.getDate() + 2);
-          await database.insert(contactSequenceEnrollments).values({
-            userId: ctx.user.id, contactId, sequenceId: input.sequenceId,
-            currentStepNumber: 1, status: "active", nextSendAt: sendDate,
-          });
-          await database.update(contacts).set({ relationshipTier: "cold", loopType: "relationship_sequence" })
-            .where(and(eq(contacts.id, contactId), eq(contacts.userId, ctx.user.id)));
-          enrolled++;
-        } catch (e) { /* skip already enrolled */ }
+      for (const contactId of requestedIds) {
+        if (!ownedIds.has(contactId) || alreadyActive.has(contactId)) continue;
+        const day = now.getDate();
+        let sendDate = new Date(now.getFullYear(), now.getMonth(), 15, 10, 0, 0);
+        if (day > 10) sendDate = new Date(now.getFullYear(), now.getMonth() + 1, 15, 10, 0, 0);
+        const dow = sendDate.getDay();
+        if (dow === 6) sendDate.setDate(sendDate.getDate() + 3);
+        else if (dow === 0) sendDate.setDate(sendDate.getDate() + 2);
+        await database.insert(contactSequenceEnrollments).values({
+          userId: ctx.user.id, contactId, sequenceId: input.sequenceId,
+          currentStepNumber: 1, status: "active", nextSendAt: sendDate,
+        });
+        await database.update(contacts).set({ relationshipTier: "cold", loopType: "relationship_sequence" })
+          .where(and(eq(contacts.id, contactId), eq(contacts.userId, ctx.user.id)));
+        enrolled++;
       }
-      return { enrolled };
+      return { enrolled, skipped: requestedIds.length - enrolled };
     }),
 });
 

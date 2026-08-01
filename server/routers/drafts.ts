@@ -23,7 +23,7 @@ async function assertOwnsGmailAccount(gmailAccountId: number | undefined, userId
 
 export const draftsRouter = router({
   list: protectedProcedure.input(z.object({
-    status: z.enum(["pending", "approved", "sent", "skipped", "failed"]).optional(),
+    status: z.enum(["pending", "approved", "sending", "sent", "skipped", "failed"]).optional(),
   })).query(async ({ ctx, input }) => {
     const drafts = await db.getEmailDrafts(ctx.user.id, input.status);
     // One query for the whole page rather than one per draft: the queue used to
@@ -108,7 +108,7 @@ export const draftsRouter = router({
    * the action by hand on a draft in front of them.
    */
   manualSend: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-    const result = await sendDraft(input.id, ctx.user.id);
+    const result = await sendDraft(input.id, ctx.user.id, { allowedStatuses: ["pending", "approved", "failed"] });
     return { ...result, deliveryStatus: "delivered" as const };
   }),
 
@@ -126,11 +126,24 @@ export const draftsRouter = router({
   }),
 
   scheduleSend: protectedProcedure
-    .input(z.object({ id: z.number(), scheduledSendAt: z.date() }))
+    .input(z.object({ id: z.number(), scheduledSendAt: z.date().nullable() }))
     .mutation(async ({ ctx, input }) => {
       const draft = await db.getEmailDraft(input.id, ctx.user.id);
       if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
-      if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
+      if (draft.status === "sent" || draft.status === "sending") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Email can no longer be rescheduled" });
+      }
+
+      if (input.scheduledSendAt === null) {
+        await db.updateEmailDraft(input.id, ctx.user.id, {
+          status: "pending",
+          scheduledSendAt: null,
+        });
+        return { success: true, scheduledAt: null };
+      }
+      if (input.scheduledSendAt.getTime() <= Date.now()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Scheduled time must be in the future" });
+      }
       
       await db.updateEmailDraft(input.id, ctx.user.id, {
         status: "approved",

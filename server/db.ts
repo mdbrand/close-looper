@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { decryptSecret, encryptSecret } from "./_core/crypto";
 import {
@@ -259,6 +259,39 @@ export async function updateEmailDraft(id: number, userId: number, data: Partial
   await db.update(emailDrafts).set(data).where(and(eq(emailDrafts.id, id), eq(emailDrafts.userId, userId)));
 }
 
+/** Atomically claims a draft for delivery so concurrent requests cannot double-send it. */
+export async function claimEmailDraft(
+  id: number,
+  userId: number,
+  allowedStatuses: EmailDraft["status"][]
+): Promise<boolean> {
+  const database = await getDb();
+  if (!database || allowedStatuses.length === 0) return false;
+  const result = await database.update(emailDrafts).set({
+    status: "sending",
+    sendStartedAt: new Date(),
+    sendError: null,
+  }).where(and(
+    eq(emailDrafts.id, id),
+    eq(emailDrafts.userId, userId),
+    inArray(emailDrafts.status, allowedStatuses)
+  ));
+  const header = Array.isArray(result) ? result[0] : result;
+  return Number((header as any)?.affectedRows ?? (header as any)?.rowsAffected ?? 0) === 1;
+}
+
+export async function getDueScheduledDrafts(now = new Date()): Promise<Array<{ id: number; userId: number }>> {
+  const database = await getDb();
+  if (!database) return [];
+  return database.select({ id: emailDrafts.id, userId: emailDrafts.userId })
+    .from(emailDrafts)
+    .where(and(
+      eq(emailDrafts.status, "approved"),
+      lte(emailDrafts.scheduledSendAt, now)
+    ))
+    .limit(100);
+}
+
 export async function recordEmailOpen(trackingId: string, ip: string, userAgent: string): Promise<void> {
   const db = await getDb();
   if (!db) return;
@@ -322,7 +355,10 @@ export async function getExtendedAnalyticsStats(userId: number) {
   const [hotContacts] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.relationshipTier, "hot")));
   const [scheduledEmails] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "approved")));
   const [sentThisMonth] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "sent"), gte(emailDrafts.sentAt, startOfMonth)));
-  const [repliesReceived] = await db.select({ count: sql<number>`count(*)` }).from(emailEvents).where(eq(emailEvents.eventType, "replied"));
+  const [repliesReceived] = await db.select({ count: sql<number>`count(*)` })
+    .from(emailEvents)
+    .innerJoin(emailDrafts, eq(emailEvents.draftId, emailDrafts.id))
+    .where(and(eq(emailEvents.eventType, "replied"), eq(emailDrafts.userId, userId)));
   const [pausedAfterReply] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.loopStatus, "paused")));
   const [pendingApproval] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "pending")));
 

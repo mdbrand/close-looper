@@ -16,6 +16,7 @@ import { generateDraftsHandler } from "../scheduled/generateDrafts";
 import { checkRepliesHandler } from "../scheduled/checkReplies";
 import { sendWeeklyDigestRouter } from "../scheduled/sendWeeklyDigest";
 import { generateSequenceDraftsRouter } from "../scheduled/generateSequenceDrafts";
+import { sendScheduledDraftsHandler } from "../scheduled/sendScheduledDrafts";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -151,6 +152,7 @@ async function startServer() {
   // ─── Scheduled Cron Handlers ─────────────────────────────────────────────
   app.post("/api/scheduled/generateDrafts", generateDraftsHandler);
   app.post("/api/scheduled/checkReplies", checkRepliesHandler);
+  app.post("/api/scheduled/sendScheduledDrafts", sendScheduledDraftsHandler);
   app.use(sendWeeklyDigestRouter);
   app.use(generateSequenceDraftsRouter);
 

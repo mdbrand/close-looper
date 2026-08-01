@@ -2,9 +2,20 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { sequences, sequenceSteps, contactSequenceEnrollments, contacts } from "../../drizzle/schema";
-import { eq, and, desc, asc, sql } from "drizzle-orm";
+import { sequences, sequenceSteps, contactSequenceEnrollments, contacts, senderProfiles, aiVoiceProfiles } from "../../drizzle/schema";
+import { eq, and, desc, asc } from "drizzle-orm";
 import { seedColdSequence } from "../seed-cold-sequence";
+import { ENV } from "../_core/env";
+
+async function getOwnedSequenceStep(database: NonNullable<Awaited<ReturnType<typeof getDb>>>, stepId: number, userId: number) {
+  const [row] = await database
+    .select({ step: sequenceSteps, sequence: sequences })
+    .from(sequenceSteps)
+    .innerJoin(sequences, eq(sequenceSteps.sequenceId, sequences.id))
+    .where(and(eq(sequenceSteps.id, stepId), eq(sequences.userId, userId)))
+    .limit(1);
+  return row;
+}
 
 export const sequencesRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -92,6 +103,8 @@ export const sequencesRouter = router({
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
     const { id, ...rest } = input;
+    const owned = await getOwnedSequenceStep(db, id, ctx.user.id);
+    if (!owned) throw new TRPCError({ code: "NOT_FOUND", message: "Sequence step not found" });
     await db.update(sequenceSteps).set(rest).where(eq(sequenceSteps.id, id));
     return { success: true };
   }),
@@ -102,9 +115,21 @@ export const sequencesRouter = router({
   })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const [[contact], [sequence]] = await Promise.all([
+      db.select({ id: contacts.id }).from(contacts)
+        .where(and(eq(contacts.id, input.contactId), eq(contacts.userId, ctx.user.id))).limit(1),
+      db.select({ id: sequences.id }).from(sequences)
+        .where(and(eq(sequences.id, input.sequenceId), eq(sequences.userId, ctx.user.id), eq(sequences.isActive, true))).limit(1),
+    ]);
+    if (!contact) throw new TRPCError({ code: "NOT_FOUND", message: "Contact not found" });
+    if (!sequence) throw new TRPCError({ code: "NOT_FOUND", message: "Sequence not found" });
     // Check no active enrollment exists
     const existing = await db.select().from(contactSequenceEnrollments)
-      .where(and(eq(contactSequenceEnrollments.contactId, input.contactId), eq(contactSequenceEnrollments.status, "active")))
+      .where(and(
+        eq(contactSequenceEnrollments.userId, ctx.user.id),
+        eq(contactSequenceEnrollments.contactId, input.contactId),
+        eq(contactSequenceEnrollments.status, "active")
+      ))
       .limit(1);
     if (existing[0]) throw new TRPCError({ code: "CONFLICT", message: "Contact already has an active enrollment" });
     // Calculate nextSendAt: 15th of current or next month
@@ -129,7 +154,8 @@ export const sequencesRouter = router({
       nextSendAt: sendDate,
     });
     // Update contact loopType
-    await db.update(contacts).set({ loopType: "relationship_sequence" }).where(eq(contacts.id, input.contactId));
+    await db.update(contacts).set({ loopType: "relationship_sequence" })
+      .where(and(eq(contacts.id, input.contactId), eq(contacts.userId, ctx.user.id)));
     return { success: true, nextSendAt: sendDate };
   }),
 
@@ -140,7 +166,9 @@ export const sequencesRouter = router({
       .where(and(eq(contactSequenceEnrollments.contactId, input.contactId), eq(contactSequenceEnrollments.userId, ctx.user.id), eq(contactSequenceEnrollments.status, "active")))
       .limit(1);
     if (!enrollment) return null;
-    const [seq] = await db.select().from(sequences).where(eq(sequences.id, enrollment.sequenceId)).limit(1);
+    const [seq] = await db.select().from(sequences)
+      .where(and(eq(sequences.id, enrollment.sequenceId), eq(sequences.userId, ctx.user.id))).limit(1);
+    if (!seq) return null;
     const steps = await db.select().from(sequenceSteps).where(eq(sequenceSteps.sequenceId, enrollment.sequenceId)).orderBy(asc(sequenceSteps.stepNumber));
     const currentStep = steps.find(s => s.stepNumber === enrollment.currentStepNumber);
     return { ...enrollment, sequence: seq, steps, currentStep };
@@ -163,9 +191,9 @@ export const sequencesRouter = router({
   generateTemplate: protectedProcedure.input(z.object({ stepId: z.number() })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-    const [step] = await db.select().from(sequenceSteps).where(eq(sequenceSteps.id, input.stepId)).limit(1);
-    if (!step) throw new TRPCError({ code: "NOT_FOUND" });
-    const [seq] = await db.select().from(sequences).where(eq(sequences.id, step.sequenceId)).limit(1);
+    const owned = await getOwnedSequenceStep(db, input.stepId, ctx.user.id);
+    if (!owned) throw new TRPCError({ code: "NOT_FOUND", message: "Sequence step not found" });
+    const { step, sequence: seq } = owned;
     const [senderProfile] = await db.select().from(senderProfiles).where(eq(senderProfiles.userId, ctx.user.id)).limit(1);
     const [voiceProfile] = await db.select().from(aiVoiceProfiles).where(eq(aiVoiceProfiles.userId, ctx.user.id)).limit(1);
     const prompt = `Write a reusable email template for Step ${step.stepNumber} of a relationship-building sequence.
@@ -238,5 +266,3 @@ BODY: [email body with {{firstName}}, {{company}}, {{industry}} placeholders]`;
     };
   }),
 });
-import { ENV } from "../_core/env";
-import { senderProfiles, aiVoiceProfiles } from "../../drizzle/schema";

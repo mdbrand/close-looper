@@ -1,4 +1,4 @@
-import { bigint, boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
+import { bigint, boolean, index, int, mysqlEnum, mysqlTable, text, timestamp, uniqueIndex, varchar, json } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -125,16 +125,24 @@ export const emailDrafts = mysqlTable("email_drafts", {
   subject: varchar("subject", { length: 500 }).notNull(),
   body: text("body").notNull(),
   whyExplanation: varchar("whyExplanation", { length: 500 }).notNull(),
-  status: mysqlEnum("status", ["pending", "approved", "sent", "skipped", "failed"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "sending", "sent", "skipped", "failed"]).default("pending").notNull(),
   scheduledSendAt: timestamp("scheduledSendAt"),
+  sendStartedAt: timestamp("sendStartedAt"),
+  sendError: text("sendError"),
   sentAt: timestamp("sentAt"),
-  gmailMessageId: varchar("gmailMessageId", { length: 200 }), // Gmail message ID for reply detection
+  gmailMessageId: varchar("gmailMessageId", { length: 200 }), // Gmail API resource ID
+  gmailThreadId: varchar("gmailThreadId", { length: 200 }), // Gmail thread used for reply detection
+  gmailRfcMessageId: varchar("gmailRfcMessageId", { length: 500 }), // RFC Message-ID fallback
   trackingId: varchar("trackingId", { length: 64 }).notNull(), // unique ID for open tracking pixel
   openCount: int("openCount").default(0).notNull(),
   firstOpenedAt: timestamp("firstOpenedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => ({
+  userStatusScheduleIdx: index("email_drafts_user_status_schedule_idx").on(table.userId, table.status, table.scheduledSendAt),
+  trackingIdUnique: uniqueIndex("email_drafts_tracking_id_unique").on(table.trackingId),
+  gmailThreadIdx: index("email_drafts_user_thread_idx").on(table.userId, table.gmailThreadId),
+}));
 
 export type EmailDraft = typeof emailDrafts.$inferSelect;
 export type InsertEmailDraft = typeof emailDrafts.$inferInsert;
@@ -239,7 +247,9 @@ export const sequenceSteps = mysqlTable("sequence_steps", {
   isActive: boolean("isActive").default(true).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => ({
+  sequenceStepUnique: uniqueIndex("sequence_steps_sequence_step_unique").on(table.sequenceId, table.stepNumber),
+}));
 
 export type SequenceStep = typeof sequenceSteps.$inferSelect;
 export type InsertSequenceStep = typeof sequenceSteps.$inferInsert;
@@ -259,7 +269,10 @@ export const contactSequenceEnrollments = mysqlTable("contact_sequence_enrollmen
   pauseReason: text("pauseReason"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, table => ({
+  userContactStatusIdx: index("enrollments_user_contact_status_idx").on(table.userId, table.contactId, table.status),
+  dueSequenceIdx: index("enrollments_status_due_idx").on(table.status, table.nextSendAt),
+}));
 
 export type ContactSequenceEnrollment = typeof contactSequenceEnrollments.$inferSelect;
 export type InsertContactSequenceEnrollment = typeof contactSequenceEnrollments.$inferInsert;
@@ -303,7 +316,9 @@ export const suppressionList = mysqlTable("suppression_list", {
   email: varchar("email", { length: 320 }).notNull(),
   reason: mysqlEnum("reason", ["unsubscribed", "bounced", "blocked"]).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+}, table => ({
+  userEmailUnique: uniqueIndex("suppression_list_user_email_unique").on(table.userId, table.email),
+}));
 
 export type SuppressionEntry = typeof suppressionList.$inferSelect;
 export type InsertSuppressionEntry = typeof suppressionList.$inferInsert;

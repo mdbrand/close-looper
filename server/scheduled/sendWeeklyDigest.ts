@@ -1,36 +1,28 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { getDb, getEmailDrafts, getContacts, getGmailAccounts } from "../db";
-import { notifyOwner } from "../_core/notification";
 import { sdk } from "../_core/sdk";
 import { google } from "googleapis";
-import { eq } from "drizzle-orm";
 
 export const sendWeeklyDigestRouter = Router();
 
-sendWeeklyDigestRouter.post("/cron/send-weekly-digest", async (req, res) => {
+export async function sendWeeklyDigestHandler(req: Request, res: Response) {
   try {
     // Authenticate cron request
     const authResult = await sdk.authenticateRequest(req);
-    if (!authResult) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    if (!authResult.isCron) return res.status(403).json({ error: "cron-only" });
 
     const db = await getDb();
     if (!db) {
       return res.status(500).json({ error: "Database not available" });
     }
 
-    // Get the owner user
+    // A SaaS digest is per user; the previous implementation only processed
+    // the Manus project owner and silently ignored every paying tenant.
     const { users } = await import("../../drizzle/schema");
-    const ownerUser = await db.select().from(users).where(eq(users.openId, process.env.OWNER_OPEN_ID || "")).limit(1);
-    
-    if (!ownerUser || ownerUser.length === 0) {
-      return res.status(404).json({ error: "Owner user not found" });
-    }
-
-    const user = ownerUser[0]!;
-    
-    try {
+    const allUsers = await db.select().from(users);
+    let processed = 0;
+    for (const user of allUsers) {
+      try {
       // Get digest data
         const now = new Date();
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -45,7 +37,7 @@ sendWeeklyDigestRouter.post("/cron/send-weekly-digest", async (req, res) => {
         const nextWeekStart = new Date();
         const nextWeekEnd = new Date(nextWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
         const upcomingDrafts = allDrafts.filter(d => 
-          d.status === "pending" && d.scheduledSendAt &&
+          d.status === "approved" && d.scheduledSendAt &&
           new Date(d.scheduledSendAt) >= nextWeekStart &&
           new Date(d.scheduledSendAt) <= nextWeekEnd
         );
@@ -147,13 +139,19 @@ sendWeeklyDigestRouter.post("/cron/send-weekly-digest", async (req, res) => {
             }
           }
         }
-    } catch (err) {
-      console.error(`[Weekly Digest] Error processing user ${user.id}:`, err);
+        processed++;
+      } catch (err) {
+        console.error(`[Weekly Digest] Error processing user ${user.id}:`, err);
+      }
     }
 
-    res.json({ success: true, processed: 1 });
+    res.json({ success: true, processed });
   } catch (err) {
     console.error("[Weekly Digest] Cron error:", err);
-    res.status(500).json({ error: String(err) });
+    res.status(500).json({ error: "Weekly digest failed" });
   }
-});
+}
+
+sendWeeklyDigestRouter.post("/api/scheduled/sendWeeklyDigest", sendWeeklyDigestHandler);
+// Keep the previous callback alive while Manus is switched to the canonical path.
+sendWeeklyDigestRouter.post("/cron/send-weekly-digest", sendWeeklyDigestHandler);
