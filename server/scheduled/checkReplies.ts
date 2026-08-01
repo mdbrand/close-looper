@@ -1,6 +1,47 @@
 import { Request, Response } from "express";
 import { notifyOwner } from "../_core/notification";
 import * as db from "../db";
+import { flattenGmailBody, getHeader, parseBounce } from "../bounceParser";
+
+/**
+ * Suppresses an address that hard-bounced, and pauses the contact behind it.
+ *
+ * Deliberately only touches addresses belonging to one of this user's own
+ * contacts. Delivery reports land in the same inbox as everything else, and a
+ * bounce for unrelated mail must never suppress an address inside Close Looper.
+ *
+ * Returns whether anything was actually suppressed.
+ */
+async function suppressBouncedAddress(userId: number, email: string): Promise<boolean> {
+  const contacts = await db.getContacts(userId);
+  const matching = contacts.filter(c => c.email?.toLowerCase() === email);
+  if (!matching.length) {
+    console.log(`[Cron] Hard bounce for an address with no matching contact; ignoring`);
+    return false;
+  }
+
+  if (await db.isEmailSuppressed(email, userId)) return false;
+
+  await db.addToSuppressionList(userId, email, "bounced");
+  for (const contact of matching) {
+    if (contact.loopStatus === "active") {
+      await db.updateContact(contact.id, userId, { loopStatus: "paused" });
+    }
+  }
+
+  // Recorded against the most recent email actually sent to this contact, so the
+  // bounce shows up in that contact's history rather than floating unattached.
+  const sent = await db.getEmailDrafts(userId, "sent");
+  const lastToContact = sent
+    .filter(d => matching.some(c => c.id === d.contactId))
+    .sort((a, b) => (b.sentAt?.getTime() ?? 0) - (a.sentAt?.getTime() ?? 0))[0];
+  if (lastToContact) {
+    await db.createEmailEvent({ draftId: lastToContact.id, eventType: "bounced" });
+  }
+
+  console.log(`[Cron] Hard bounce suppressed an address for user ${userId}`);
+  return true;
+}
 
 export async function checkRepliesHandler(req: Request, res: Response) {
   try {
@@ -17,6 +58,7 @@ export async function checkRepliesHandler(req: Request, res: Response) {
     const allUsers = await allDb.select().from(users);
 
     let repliesFound = 0;
+    let bouncesFound = 0;
 
     for (const dbUser of allUsers) {
       const gmailAccounts = await db.getGmailAccounts(dbUser.id);
@@ -25,7 +67,6 @@ export async function checkRepliesHandler(req: Request, res: Response) {
       // Get all sent emails with Gmail message IDs
       const sentDrafts = await db.getEmailDrafts(dbUser.id, "sent");
       const draftsWithMessageId = sentDrafts.filter(d => d.gmailMessageId);
-      if (!draftsWithMessageId.length) continue;
 
       for (const gmailAccount of gmailAccounts) {
         try {
@@ -55,6 +96,28 @@ export async function checkRepliesHandler(req: Request, res: Response) {
           for (const msg of data.messages) {
             const { data: fullMsg } = await gmail.users.messages.get({ userId: "me", id: msg.id! });
             const headers = fullMsg.payload?.headers ?? [];
+
+            // Bounces first: a delivery report is not a reply, and treating one
+            // as such would pause the loop for the wrong reason.
+            const bounce = parseBounce({
+              from: getHeader(headers, "From"),
+              subject: getHeader(headers, "Subject"),
+              contentType: getHeader(headers, "Content-Type"),
+              body: flattenGmailBody(fullMsg.payload),
+            });
+
+            if (bounce.isBounce) {
+              // Only permanent failures are acted on. Soft bounces are transient
+              // — a full mailbox or a greylisting server is not a dead address.
+              if (bounce.kind === "hard" && bounce.failedRecipient) {
+                const handled = await suppressBouncedAddress(dbUser.id, bounce.failedRecipient);
+                if (handled) bouncesFound++;
+              } else {
+                console.log(`[Cron] Soft or unparseable bounce for user ${dbUser.id}, taking no action`);
+              }
+              continue;
+            }
+
             const inReplyTo = headers.find(h => h.name === "In-Reply-To")?.value;
             const references = headers.find(h => h.name === "References")?.value;
 
@@ -89,10 +152,11 @@ export async function checkRepliesHandler(req: Request, res: Response) {
       }
     }
 
-    console.log(`[Cron] checkReplies complete. Replies found: ${repliesFound}`);
-    res.json({ ok: true, repliesFound });
+    console.log(`[Cron] checkReplies complete. Replies: ${repliesFound}, bounces suppressed: ${bouncesFound}`);
+    res.json({ ok: true, repliesFound, bouncesFound });
   } catch (err: any) {
     console.error("[Cron] checkReplies error:", err);
-    res.status(500).json({ error: err.message, stack: err.stack, timestamp: new Date().toISOString() });
+    // Stack traces stay in the logs, not in the HTTP response.
+    res.status(500).json({ error: "checkReplies failed", timestamp: new Date().toISOString() });
   }
 }
