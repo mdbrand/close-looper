@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import { trpc } from "@/lib/trpc";
+import { hasSkippedOnboarding } from "@/lib/onboarding";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { Send, Mail, TrendingUp, Clock, Users, PauseCircle, AlertTriangle, ArrowRight, Inbox, Mic, Plus, Star, MessageSquare, Snowflake, Thermometer, Flame, GitBranch } from "lucide-react";
+import { Send, Mail, TrendingUp, Clock, Users, PauseCircle, AlertTriangle, ArrowRight, Inbox, Plus, Star, MessageSquare, Snowflake, Thermometer, Flame, GitBranch, Rocket } from "lucide-react";
 
 function StatCard({ icon: Icon, label, value, sub, color, onClick }: { icon: any; label: string; value: string | number; sub?: string; color?: string; onClick?: () => void }) {
   return (
@@ -28,9 +30,18 @@ export default function Dashboard() {
   const { data: pendingDrafts } = trpc.drafts.list.useQuery({ status: "pending" });
   const { data: topEngaged } = trpc.analytics.topEngaged.useQuery();
   const { data: sigStats } = trpc.signatures.stats.useQuery();
-  const { data: voiceProfile } = trpc.voice.get.useQuery();
   const { data: pipeline } = trpc.analytics.pipeline.useQuery();
   const { data: extStats } = trpc.analytics.extendedStats.useQuery();
+  const { data: onboarding } = trpc.onboarding.status.useQuery();
+
+  // Walk users who have not set up yet into the wizard. Skipping is sticky, so
+  // this guides once rather than nagging — the progress card below stays either
+  // way, which is what keeps the flow skippable rather than blocking.
+  useEffect(() => {
+    if (onboarding && !onboarding.isComplete && !hasSkippedOnboarding()) {
+      setLocation("/welcome");
+    }
+  }, [onboarding, setLocation]);
 
   return (
     <div className="page-enter max-w-5xl">
@@ -39,18 +50,22 @@ export default function Dashboard() {
         <p className="text-muted-foreground text-sm mt-1">Your relationship nurturing at a glance</p>
       </div>
 
-      {/* Onboarding nudges */}
-      {!voiceProfile && (
+      {/* Setup progress — replaces the one-off nudges that used to live here.
+          Driven by onboarding.status so it disappears on its own once done. */}
+      {onboarding && !onboarding.isComplete && (
         <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 mb-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Mic className="w-5 h-5 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-medium">Set up your AI Voice Profile</p>
-              <p className="text-xs text-muted-foreground">Write a few sentences the way you talk — the AI will match your exact tone on every email.</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <Rocket className="w-5 h-5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-medium">Finish setting up Close Looper</p>
+              <p className="text-xs text-muted-foreground">
+                {onboarding.completedCount} of {onboarding.totalSteps} done — {onboarding.totalSteps - onboarding.completedCount} step
+                {onboarding.totalSteps - onboarding.completedCount === 1 ? "" : "s"} left before your first emails can go out.
+              </p>
             </div>
           </div>
-          <Button size="sm" onClick={() => setLocation("/voice-setup")} className="gap-1.5 shrink-0">
-            Set Up <ArrowRight className="w-3.5 h-3.5" />
+          <Button size="sm" onClick={() => setLocation("/welcome")} className="gap-1.5 shrink-0">
+            Continue <ArrowRight className="w-3.5 h-3.5" />
           </Button>
         </div>
       )}

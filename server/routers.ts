@@ -15,6 +15,7 @@ import { snoozeRouter } from "./routers/snooze";
 import { signaturesRouter } from "./routers/signatures";
 import { senderProfileRouter } from "./routers/senderProfile";
 import { publicRouter, adminRouter } from "./routers/public";
+import { onboardingRouter } from "./routers/onboarding";
 
 export const appRouter = router({
   system: systemRouter,
@@ -42,6 +43,7 @@ export const appRouter = router({
   senderProfile: senderProfileRouter,
   sequences: sequencesRouter,
   scan: scanRouter,
+  onboarding: onboardingRouter,
 });
 
 export type AppRouter = typeof appRouter;
