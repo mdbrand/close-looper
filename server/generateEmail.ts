@@ -1,4 +1,5 @@
 import { invokeLLM } from "./_core/llm";
+import { logAiUsage } from "./usageTracker";
 import type { AiVoiceProfile, Contact } from "../drizzle/schema";
 
 /**
@@ -98,6 +99,18 @@ export async function generateTouchpointEmail(
   if (!content) throw new Error("No response from AI");
 
   const generated = JSON.parse(content) as GeneratedEmail;
+
+  // Log usage for credit tracking
+  if (response.usage) {
+    await logAiUsage({
+      userId,
+      action: "email_generation",
+      model: response.model ?? null,
+      promptTokens: response.usage.prompt_tokens,
+      completionTokens: response.usage.completion_tokens,
+      totalTokens: response.usage.total_tokens,
+    });
+  }
 
   // Apply the user's learned corrections. This step existed and was tested but
   // was never wired into either generation path, so every rule the Feedback

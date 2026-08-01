@@ -1,4 +1,4 @@
-import { bigint, boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { bigint, boolean, int, mysqlEnum, mysqlTable, text, timestamp, varchar, json } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -367,3 +367,16 @@ export const userProfiles = mysqlTable("user_profiles", {
   inviteCodeUsed: varchar("inviteCodeUsed", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+// ─── AI Usage Log ─────────────────────────────────────────────────────────────
+export const aiUsageLog = mysqlTable("ai_usage_log", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  action: varchar("action", { length: 100 }).notNull(), // e.g. "email_generation", "voice_analysis", "business_card_scan"
+  model: varchar("model", { length: 100 }),
+  promptTokens: int("promptTokens").default(0).notNull(),
+  completionTokens: int("completionTokens").default(0).notNull(),
+  totalTokens: int("totalTokens").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AiUsageLog = typeof aiUsageLog.$inferSelect;
+export type InsertAiUsageLog = typeof aiUsageLog.$inferInsert;

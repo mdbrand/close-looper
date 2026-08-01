@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Mail, Plus, Trash2, Star, CheckCircle2, AlertCircle, Mic, ExternalLink, Database } from "lucide-react";
+import { Mail, Plus, Trash2, Star, CheckCircle2, AlertCircle, Mic, ExternalLink, Database, Activity, Zap } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
   const search = useSearch();
 
+  const { data: usageStats } = trpc.usage.stats.useQuery();
   const { data: gmailAccounts, refetch: refetchGmail } = trpc.gmail.list.useQuery();
   const { data: voiceProfile } = trpc.voice.get.useQuery();
   const { data: authUrl } = trpc.gmail.getAuthUrl.useQuery(undefined, {
@@ -266,8 +267,87 @@ export default function Settings() {
             ))}
           </div>
         ) : !showNewSig ? (
-          <p className="text-sm text-muted-foreground">No signatures yet. Create one to auto-append to your emails.</p>
-        ) : null}
+         <p className="text-sm text-muted-foreground">No signatures yet. Create one to auto-append to your emails.</p>
+       ) : null}
+     </section>
+
+      {/* AI Credit Usage */}
+      <section className="bg-card border border-border rounded-xl p-6 space-y-5">
+        <div className="flex items-center gap-2">
+          <Activity className="w-5 h-5 text-primary" />
+          <h2 className="font-semibold">AI Credit Usage</h2>
+        </div>
+        {usageStats ? (
+          <>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <p className="text-2xl font-serif">{usageStats.thisMonth.calls}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Calls This Month</p>
+                <p className="text-xs text-muted-foreground">{usageStats.thisMonth.totalTokens.toLocaleString()} tokens</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <p className="text-2xl font-serif">{usageStats.lastMonth.calls}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Last Month</p>
+                <p className="text-xs text-muted-foreground">{usageStats.lastMonth.totalTokens.toLocaleString()} tokens</p>
+              </div>
+              <div className="bg-muted/30 rounded-lg p-4 text-center">
+                <p className="text-2xl font-serif">{usageStats.allTime.calls}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">All Time</p>
+                <p className="text-xs text-muted-foreground">{usageStats.allTime.totalTokens.toLocaleString()} tokens</p>
+              </div>
+            </div>
+            {usageStats.byAction.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">By Action</p>
+                <div className="space-y-2">
+                  {usageStats.byAction.map((a: any) => (
+                    <div key={a.action} className="flex items-center justify-between bg-muted/20 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-sm capitalize">{a.action.replace(/_/g, " ")}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-medium">{a.calls} calls</span>
+                        <span className="text-xs text-muted-foreground ml-2">({a.totalTokens.toLocaleString()} tokens)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {usageStats.dailyBreakdown.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Last 30 Days</p>
+                <div className="flex items-end gap-0.5 h-16">
+                  {usageStats.dailyBreakdown.map((d: any) => {
+                    const maxCalls = Math.max(...usageStats.dailyBreakdown.map((x: any) => x.calls), 1);
+                    const height = Math.max((d.calls / maxCalls) * 100, 4);
+                    return (
+                      <div
+                        key={d.date}
+                        className="flex-1 bg-primary/60 rounded-t-sm hover:bg-primary transition-colors"
+                        style={{ height: `${height}%` }}
+                        title={`${d.date}: ${d.calls} calls, ${d.totalTokens} tokens`}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                  <span>{usageStats.dailyBreakdown[0]?.date}</span>
+                  <span>{usageStats.dailyBreakdown[usageStats.dailyBreakdown.length - 1]?.date}</span>
+                </div>
+              </div>
+            )}
+            {usageStats.allTime.calls === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-4">No AI usage recorded yet. Credits will be tracked as you generate emails.</p>
+            )}
+          </>
+        ) : (
+          <div className="space-y-3">
+            <div className="h-20 bg-muted/30 rounded-lg animate-pulse" />
+            <div className="h-12 bg-muted/30 rounded-lg animate-pulse" />
+          </div>
+        )}
       </section>
 
       {!isGmailConfigured && (

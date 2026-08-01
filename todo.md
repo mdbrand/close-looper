@@ -130,3 +130,10 @@
 - [x] Privacy Policy page
 - [x] Wire public routes in App.tsx (/, /signup, /signin, /terms, /privacy) + auth routes (/dashboard, /contacts, /queue, /calendar, /sequences, /referrals, /admin)
 - [x] Add Refer & Earn + Admin (role-gated) to DashboardLayout sidebar
+
+## Phase 15: AI Credit Usage Dashboard
+- [x] Database: ai_usage_log table (userId, action, model, promptTokens, completionTokens, totalTokens, createdAt)
+- [x] Backend: log every LLM call in generateEmail.ts (email_generation action)
+- [x] Backend: usage stats router (this month, last month, all-time, daily breakdown, by action)
+- [x] Frontend: Credit Usage section in Settings page with counters, by-action breakdown, and 30-day bar chart
+- [x] All 69 tests passing, zero TypeScript errors
