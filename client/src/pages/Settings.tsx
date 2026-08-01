@@ -2,8 +2,13 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Mail, Plus, Trash2, Star, CheckCircle2, AlertCircle, Mic, ExternalLink, Database, Activity, Zap } from "lucide-react";
+import { Mail, Plus, Trash2, Star, CheckCircle2, AlertCircle, Mic, ExternalLink, Database, Activity, Zap, Ban, Rocket } from "lucide-react";
 import { useLocation, useSearch } from "wouter";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ONBOARDING_SKIPPED_KEY } from "@/lib/onboarding";
 
 export default function Settings() {
   const [, setLocation] = useLocation();
@@ -17,6 +22,22 @@ export default function Settings() {
     enabled: true,
   });
   const { data: touchpointCount } = trpc.touchpoints.list.useQuery();
+  const { data: onboarding } = trpc.onboarding.status.useQuery();
+  const { data: suppressed, refetch: refetchSuppressed } = trpc.suppression.list.useQuery();
+
+  const [resubscribing, setResubscribing] = useState<string | null>(null);
+  const removeSuppression = trpc.suppression.remove.useMutation({
+    onSuccess: (res) => {
+      toast.success(
+        res.reactivatedContacts > 0
+          ? "Removed from Do Not Email — their loop is active again."
+          : "Removed from Do Not Email."
+      );
+      setResubscribing(null);
+      refetchSuppressed();
+    },
+    onError: (e) => { toast.error(e.message); setResubscribing(null); },
+  });
 
   const setDefaultMutation = trpc.gmail.setDefault.useMutation({
     onSuccess: () => { toast.success("Default account updated"); refetchGmail(); },
@@ -348,6 +369,82 @@ export default function Settings() {
             <div className="h-12 bg-muted/30 rounded-lg animate-pulse" />
           </div>
         )}
+      </section>
+
+      {/* Suppression list — unsubscribing used to be a one-way door with no way
+          back short of a database edit. */}
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Ban className="w-5 h-5 text-primary" />
+          <h2 className="font-semibold">Do Not Email</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          People who unsubscribed or whose address bounced. Close Looper will never send to these addresses.
+        </p>
+
+        {suppressed === undefined ? (
+          <div className="h-12 bg-muted/30 rounded-lg animate-pulse" />
+        ) : suppressed.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">Nobody is on this list. That is a good sign.</p>
+        ) : (
+          <ul className="divide-y divide-border border border-border rounded-lg">
+            {suppressed.map(entry => (
+              <li key={entry.id} className="flex items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{entry.email}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {entry.reason} · {new Date(entry.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => setResubscribing(entry.email)}>
+                  Allow again
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <AlertDialog open={resubscribing !== null} onOpenChange={open => !open && setResubscribing(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start emailing {resubscribing} again?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes them from your Do Not Email list and sets their contact loop back to active, so
+              they will start receiving your emails again. Only do this if they have asked to hear from you.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (resubscribing) removeSuppression.mutate({ email: resubscribing }); }}
+            >
+              Yes, allow emails again
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Setup — skipping the wizard is sticky, so this is the only way back. */}
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <Rocket className="w-5 h-5 text-primary" />
+          <h2 className="font-semibold">Setup</h2>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {onboarding && !onboarding.isComplete
+            ? `You have finished ${onboarding.completedCount} of ${onboarding.totalSteps} setup steps.`
+            : "Your setup is complete. You can walk through it again any time."}
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            localStorage.removeItem(ONBOARDING_SKIPPED_KEY);
+            setLocation("/welcome");
+          }}
+        >
+          {onboarding && !onboarding.isComplete ? "Finish setup" : "Review setup"}
+        </Button>
       </section>
 
       {!isGmailConfigured && (

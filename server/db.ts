@@ -433,6 +433,52 @@ export async function isEmailSuppressed(email: string, userId: number): Promise<
   return result.length > 0;
 }
 
+export async function getSuppressionList(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(suppressionList)
+    .where(eq(suppressionList.userId, userId))
+    .orderBy(desc(suppressionList.createdAt));
+}
+
+/**
+ * Lifts a suppression.
+ *
+ * Unsubscribing was previously a one-way door — the address was blocked with no
+ * way back short of editing the database, so an accidental click or a contact
+ * who later asked to hear from you again could not be undone.
+ */
+export async function removeFromSuppressionList(userId: number, email: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(suppressionList)
+    .where(and(eq(suppressionList.userId, userId), eq(suppressionList.email, email.toLowerCase())));
+}
+
+/** Reactivates this user's paused contacts at a given address. */
+export async function reactivateContactsByEmail(userId: number, email: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const matching = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.userId, userId), eq(contacts.email, email.toLowerCase())));
+
+  let reactivated = 0;
+  for (const contact of matching) {
+    if (contact.loopStatus !== "paused") continue;
+    await db
+      .update(contacts)
+      .set({ loopStatus: "active" })
+      .where(and(eq(contacts.id, contact.id), eq(contacts.userId, userId)));
+    reactivated++;
+  }
+  return reactivated;
+}
+
 export async function addToSuppressionList(userId: number, email: string, reason: "unsubscribed" | "bounced" | "blocked"): Promise<void> {
   const db = await getDb();
   if (!db) return;

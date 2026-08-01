@@ -19,6 +19,7 @@ import { sequencesRouter } from "./routers/sequences";
 import { scanRouter } from "./routers/scan";
 import { usageRouter } from "./routers/usage";
 import { onboardingRouter } from "./routers/onboarding";
+import { suppressionRouter } from "./routers/suppression";
 
 export const appRouter = router({
   system: systemRouter,
@@ -48,6 +49,7 @@ export const appRouter = router({
   scan: scanRouter,
   usage: usageRouter,
   onboarding: onboardingRouter,
+  suppression: suppressionRouter,
 });
 
 export type AppRouter = typeof appRouter;
