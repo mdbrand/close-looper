@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -31,6 +31,24 @@ export default function Settings() {
   });
   const seedMutation = trpc.touchpoints.seed.useMutation({
     onSuccess: (data) => toast.success(`Seeded ${data.seeded} touchpoints!`),
+    onError: (e) => toast.error(e.message),
+  });
+
+  const [showNewSig, setShowNewSig] = useState(false);
+  const [sigName, setSigName] = useState("");
+  const [sigContent, setSigContent] = useState("");
+  const [editingSig, setEditingSig] = useState<any>(null);
+  const { data: signatures, refetch: refetchSigs } = trpc.signatures.list.useQuery();
+  const createSigMutation = trpc.signatures.create.useMutation({
+    onSuccess: () => { toast.success("Signature created"); setShowNewSig(false); setSigName(""); setSigContent(""); refetchSigs(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateSigMutation = trpc.signatures.update.useMutation({
+    onSuccess: () => { toast.success("Signature updated"); setEditingSig(null); refetchSigs(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const deleteSigMutation = trpc.signatures.delete.useMutation({
+    onSuccess: () => { toast.success("Signature deleted"); refetchSigs(); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -174,6 +192,80 @@ export default function Settings() {
       </section>
 
       {/* Google OAuth Setup Instructions */}
+
+      {/* Email Signatures */}
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Email Signatures</h2>
+          <Button size="sm" variant="outline" onClick={() => setShowNewSig(true)} className="gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> New Signature
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground">Create multiple signatures with persuasive copy. The default signature auto-appends to every outgoing email.</p>
+
+        {showNewSig && (
+          <div className="border border-border rounded-lg p-4 space-y-3 bg-muted/20">
+            <input
+              placeholder="Signature name (e.g., Referral Partners, Casual)"
+              value={sigName}
+              onChange={e => setSigName(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background"
+            />
+            <textarea
+              placeholder="Your signature content...&#10;&#10;Example:&#10;Rob Cooley&#10;Cooley Brothers | Keeping your home comfortable&#10;📞 (555) 123-4567&#10;💬 Reply to this email — I read every one"
+              value={sigContent}
+              onChange={e => setSigContent(e.target.value)}
+              rows={5}
+              className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background resize-y"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => createSigMutation.mutate({ name: sigName, content: sigContent, isDefault: !signatures?.length })} disabled={!sigName || !sigContent || createSigMutation.isPending}>
+                {createSigMutation.isPending ? "Saving..." : "Save Signature"}
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setShowNewSig(false)}>Cancel</Button>
+            </div>
+          </div>
+        )}
+
+        {signatures && signatures.length > 0 ? (
+          <div className="space-y-2">
+            {signatures.map(sig => (
+              <div key={sig.id} className="border border-border rounded-lg p-4">
+                {editingSig?.id === sig.id ? (
+                  <div className="space-y-3">
+                    <input value={editingSig.name} onChange={e => setEditingSig({ ...editingSig, name: e.target.value })} className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background" />
+                    <textarea value={editingSig.content} onChange={e => setEditingSig({ ...editingSig, content: e.target.value })} rows={4} className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background resize-y" />
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => updateSigMutation.mutate({ id: sig.id, name: editingSig.name, content: editingSig.content })} disabled={updateSigMutation.isPending}>Save</Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditingSig(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{sig.name}</p>
+                        {sig.isDefault && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Default</span>}
+                      </div>
+                      <div className="flex gap-1">
+                        {!sig.isDefault && (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => updateSigMutation.mutate({ id: sig.id, isDefault: true })}>Set Default</Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingSig({ ...sig })}>Edit</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => { if (confirm("Delete this signature?")) deleteSigMutation.mutate({ id: sig.id }); }}>Delete</Button>
+                      </div>
+                    </div>
+                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap bg-muted/30 rounded p-3">{sig.content}</pre>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : !showNewSig ? (
+          <p className="text-sm text-muted-foreground">No signatures yet. Create one to auto-append to your emails.</p>
+        ) : null}
+      </section>
+
       {!isGmailConfigured && (
         <section className="bg-amber-50 border border-amber-200 rounded-xl p-6 space-y-3">
           <div className="flex items-center gap-2">

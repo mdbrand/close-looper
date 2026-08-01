@@ -43,6 +43,13 @@
       "when": 1785552093933,
       "tag": "0005_rare_paladin",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1785552463069,
+      "tag": "0006_pale_mesmero",
+      "breakpoints": true
     }
   ]
 }

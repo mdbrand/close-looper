@@ -174,3 +174,17 @@ export const importBatches = mysqlTable("import_batches", {
 
 export type ImportBatch = typeof importBatches.$inferSelect;
 export type InsertImportBatch = typeof importBatches.$inferInsert;
+
+// ─── Email Signatures ────────────────────────────────────────────────────────
+export const emailSignatures = mysqlTable("email_signatures", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  isDefault: boolean("isDefault").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmailSignature = typeof emailSignatures.$inferSelect;
+export type InsertEmailSignature = typeof emailSignatures.$inferInsert;

@@ -33,7 +33,8 @@ export const appRouter = router({
   importExport: importExportRouter,
   digest: digestRouter,
   snooze: snoozeRouter,
+  signatures: signaturesRouter,
 });
 
 export type AppRouter = typeof appRouter;
-
+import { signaturesRouter } from "./routers/signatures";
