@@ -79,6 +79,14 @@ export const contacts = mysqlTable("contacts", {
   nextTouchScheduledAt: timestamp("nextTouchScheduledAt"),
   snoozeUntil: timestamp("snoozeUntil"), // null = not snoozed, timestamp = resume date
   signatureId: int("signatureId"),
+  relationshipTier: mysqlEnum("relationshipTier", ["cold", "warm", "hot"]).default("warm").notNull(),
+  loopType: mysqlEnum("loopType", ["relationship_sequence", "flexible_touchpoints", "manual", "none"]).default("flexible_touchpoints").notNull(),
+  contactSource: varchar("contactSource", { length: 100 }),
+  sourceName: varchar("sourceName", { length: 200 }),
+  sourceLocation: varchar("sourceLocation", { length: 300 }),
+  sourceUrl: varchar("sourceUrl", { length: 500 }),
+  dateFoundOrMet: varchar("dateFoundOrMet", { length: 20 }),
+  permissionNote: text("permissionNote"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -110,6 +118,9 @@ export const emailDrafts = mysqlTable("email_drafts", {
   touchpointId: int("touchpointId"),
   touchpointName: varchar("touchpointName", { length: 200 }), // snapshot at generation time
   touchpointCategory: varchar("touchpointCategory", { length: 50 }),
+  sequenceStepId: int("sequenceStepId"),
+  sequenceEnrollmentId: int("sequenceEnrollmentId"),
+  generationSource: mysqlEnum("generationSource", ["relationship_sequence", "flexible_touchpoint", "manual"]).default("flexible_touchpoint").notNull(),
   gmailAccountId: int("gmailAccountId"), // which gmail account to send from
   subject: varchar("subject", { length: 500 }).notNull(),
   body: text("body").notNull(),
@@ -191,3 +202,94 @@ export const emailSignatures = mysqlTable("email_signatures", {
 
 export type EmailSignature = typeof emailSignatures.$inferSelect;
 export type InsertEmailSignature = typeof emailSignatures.$inferInsert;
+
+// ─── Sequences ──────────────────────────────────────────────────────────────
+export const sequences = mysqlTable("sequences", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 300 }).notNull(),
+  description: text("description"),
+  relationshipTier: mysqlEnum("relationshipTier", ["cold", "warm", "hot"]).default("cold").notNull(),
+  totalSteps: int("totalSteps").default(0).notNull(),
+  isDefault: boolean("isDefault").default(false).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Sequence = typeof sequences.$inferSelect;
+export type InsertSequence = typeof sequences.$inferInsert;
+
+// ─── Sequence Steps ─────────────────────────────────────────────────────────
+export const sequenceSteps = mysqlTable("sequence_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  sequenceId: int("sequenceId").notNull(),
+  stepNumber: int("stepNumber").notNull(),
+  internalName: varchar("internalName", { length: 200 }).notNull(),
+  relationshipObjective: text("relationshipObjective").notNull(),
+  desiredRecipientThought: text("desiredRecipientThought"),
+  emailGuidance: text("emailGuidance").notNull(),
+  suggestedClosing: text("suggestedClosing"),
+  primaryCallToAction: text("primaryCallToAction"),
+  minimumWordCount: int("minimumWordCount").default(75).notNull(),
+  maximumWordCount: int("maximumWordCount").default(150).notNull(),
+  delayMonths: int("delayMonths").default(1).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SequenceStep = typeof sequenceSteps.$inferSelect;
+export type InsertSequenceStep = typeof sequenceSteps.$inferInsert;
+
+// ─── Contact Sequence Enrollments ───────────────────────────────────────────
+export const contactSequenceEnrollments = mysqlTable("contact_sequence_enrollments", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  contactId: int("contactId").notNull(),
+  sequenceId: int("sequenceId").notNull(),
+  currentStepNumber: int("currentStepNumber").default(1).notNull(),
+  status: mysqlEnum("status", ["active", "paused", "completed", "cancelled"]).default("active").notNull(),
+  enrolledAt: timestamp("enrolledAt").defaultNow().notNull(),
+  nextSendAt: timestamp("nextSendAt"),
+  completedAt: timestamp("completedAt"),
+  pausedAt: timestamp("pausedAt"),
+  pauseReason: text("pauseReason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ContactSequenceEnrollment = typeof contactSequenceEnrollments.$inferSelect;
+export type InsertContactSequenceEnrollment = typeof contactSequenceEnrollments.$inferInsert;
+
+// ─── Sender Profile ─────────────────────────────────────────────────────────
+export const senderProfiles = mysqlTable("sender_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  senderFirstName: varchar("senderFirstName", { length: 100 }),
+  senderLastName: varchar("senderLastName", { length: 100 }),
+  companyName: varchar("companyName", { length: 300 }),
+  industry: varchar("industry", { length: 200 }),
+  city: varchar("city", { length: 200 }),
+  serviceArea: varchar("serviceArea", { length: 300 }),
+  mainService: text("mainService"),
+  shortCompanyDescription: text("shortCompanyDescription"),
+  peopleNormallyHelped: text("peopleNormallyHelped"),
+  mainProblemSolved: text("mainProblemSolved"),
+  idealReferral: text("idealReferral"),
+  businessValues: text("businessValues"),
+  clientSuccessStory: text("clientSuccessStory"),
+  helpfulTip: text("helpfulTip"),
+  helpfulResource: text("helpfulResource"),
+  communityInvolvement: text("communityInvolvement"),
+  personalBusinessLesson: text("personalBusinessLesson"),
+  phone: varchar("phone", { length: 30 }),
+  website: varchar("website", { length: 500 }),
+  linkedinUrl: varchar("linkedinUrl", { length: 500 }),
+  mailingAddress: text("mailingAddress"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SenderProfile = typeof senderProfiles.$inferSelect;
+export type InsertSenderProfile = typeof senderProfiles.$inferInsert;
