@@ -252,6 +252,9 @@ export default function CalendarPage() {
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap text-foreground border border-border/50">
                     {defaultSignature.content}
+                    {senderProfile?.mailingAddress && (
+                      <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40">{senderProfile.mailingAddress}</p>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 italic">This will appear below the email body when sent.</p>
                 </div>
@@ -362,3 +365,4 @@ export default function CalendarPage() {
     </div>
   );
 }
+  const { data: senderProfile } = trpc.senderProfile.get.useQuery();

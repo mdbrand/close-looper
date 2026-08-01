@@ -49,6 +49,8 @@ export default function ContactDetail() {
   const contactDrafts = (drafts ?? []).filter(d => d.contactId === contactId);
 
   const { data: signatures } = trpc.signatures.list.useQuery();
+  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();
+  const { data: senderProfile } = trpc.senderProfile.get.useQuery();
   const updateContactSigMutation = trpc.contacts.update.useMutation({
     onSuccess: () => { toast.success("Signature updated"); refetch(); },
     onError: (e: any) => toast.error(e.message),
@@ -405,6 +407,9 @@ export default function ContactDetail() {
                     {defaultSignature.content}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1 italic">This will appear below the email body when sent.</p>
+                    {senderProfile?.mailingAddress && (
+                      <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/40">{senderProfile.mailingAddress}</p>
+                    )}
                 </div>
               )}
               {(selectedEmail.status === "pending" || selectedEmail.status === "approved") && (
@@ -492,4 +497,3 @@ export default function ContactDetail() {
     </div>
   );
 }
-  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();
