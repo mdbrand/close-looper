@@ -1,7 +1,6 @@
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -22,15 +21,8 @@ const STATUS_COLORS: Record<string, string> = {
 export default function CalendarPage() {
   const [selectedDraft, setSelectedDraft] = useState<any>(null);
   const [confirmSendDraft, setConfirmSendDraft] = useState<any>(null);
-  const [confirmResendDraft, setConfirmResendDraft] = useState<any>(null);
   const [view, setView] = useState<"calendar" | "list">("calendar");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string | null>(null);
   const manualSendMutation = trpc.drafts.manualSend.useMutation();
-  const [filterDelivery, setFilterDelivery] = useState<string | null>(null);
-  const resendMutation = trpc.resend.resendEmail.useMutation();
-  const { data: gmailAccounts } = trpc.gmail.list.useQuery();
-  const defaultGmailId = gmailAccounts?.find(a => a.isDefault)?.id ?? gmailAccounts?.[0]?.id;
   const [currentDate, setCurrentDate] = useState(() => new Date());
 
   const startDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1), [currentDate]);
@@ -38,26 +30,6 @@ export default function CalendarPage() {
 
   const { data: calendarEvents, isLoading } = trpc.analytics.calendarEvents.useQuery({ startDate, endDate });
   const { data: allDrafts, isLoading: listLoading } = trpc.analytics.listView.useQuery();
-  const { data: contactHistory } = trpc.analytics.contactHistory.useQuery(
-    { contactId: selectedDraft?.contactId ?? 0 },
-    { enabled: !!selectedDraft?.contactId }
-  );
-
-  // Filter and search drafts
-  const filteredDrafts = useMemo(() => {
-    let filtered = allDrafts ?? [];
-    if (filterStatus) filtered = filtered.filter(d => d.status === filterStatus);
-    if (filterDelivery) filtered = filtered.filter(d => d.deliveryStatus === filterDelivery);
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(d =>
-        d.contact?.firstName?.toLowerCase().includes(q) ||
-        d.contact?.lastName?.toLowerCase().includes(q) ||
-        d.subject?.toLowerCase().includes(q)
-      );
-    }
-    return filtered;
-  }, [allDrafts, filterStatus, filterDelivery, searchQuery]);
 
   const prevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -125,24 +97,11 @@ export default function CalendarPage() {
                       <>
                         <div className={`w-7 h-7 flex items-center justify-center rounded-full text-sm mb-1 ${isToday ? "bg-primary text-primary-foreground font-semibold" : "text-foreground"}`}>{day}</div>
                         <div className="space-y-0.5">
-                          {events.slice(0, 3).map(event => {
-                            const firstLine = event.body?.split('\n')[0]?.substring(0, 50) ?? "";
-                            return (
-                              <Tooltip key={event.id}>
-                                <TooltipTrigger asChild>
-                                  <div className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)}>
-                                    {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="right" className="max-w-xs">
-                                  <div className="space-y-1">
-                                    <p className="font-medium text-sm">{event.subject}</p>
-                                    <p className="text-xs text-muted-foreground line-clamp-2">{firstLine}</p>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                            );
-                          })}
+                          {events.slice(0, 3).map(event => (
+                            <div key={event.id} className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)}>
+                              {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.
+                            </div>
+                          ))}
                           {events.length > 3 && <div className="text-xs text-muted-foreground px-1">+{events.length - 3} more</div>}
                         </div>
                       </>
@@ -156,38 +115,8 @@ export default function CalendarPage() {
       ) : (
         /* List View */
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-border space-y-3">
+          <div className="px-6 py-4 border-b border-border">
             <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">All Emails — Chronological</h2>
-            <div className="flex gap-2 flex-wrap">
-              <input
-                type="text"
-                placeholder="Search by name or subject..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="flex-1 min-w-[200px] px-3 py-2 text-sm border border-border rounded-lg bg-background"
-              />
-              <select
-                value={filterStatus ?? ""}
-                onChange={e => setFilterStatus(e.target.value || null)}
-                className="px-3 py-2 text-sm border border-border rounded-lg bg-background"
-              >
-                <option value="">All Status</option>
-                <option value="pending">Pending</option>
-                <option value="approved">Approved</option>
-                <option value="sent">Sent</option>
-                <option value="skipped">Skipped</option>
-              </select>
-              <select
-                value={filterDelivery ?? ""}
-                onChange={e => setFilterDelivery(e.target.value || null)}
-                className="px-3 py-2 text-sm border border-border rounded-lg bg-background"
-              >
-                <option value="">All Delivery</option>
-                <option value="delivered">Delivered</option>
-                <option value="bounced">Bounced</option>
-                <option value="failed">Failed</option>
-              </select>
-            </div>
           </div>
           {listLoading ? (
             <div className="p-6 space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
@@ -204,17 +133,16 @@ export default function CalendarPage() {
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Category</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Opens</th>
-                    <th className="text-left px-4 py-3 text-xs font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDrafts.map(draft => {
+                  {allDrafts.map(draft => {
                     const date = draft.sentAt ?? draft.scheduledSendAt ?? draft.createdAt;
                     return (
-                      <tr key={draft.id} className="border-b border-border hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => setSelectedDraft(draft)}>
+                      <tr key={draft.id} className="border-b border-border hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{date ? new Date(date).toLocaleDateString() : "—"}</td>
                         <td className="px-4 py-3 font-medium">{draft.contact?.firstName} {draft.contact?.lastName}</td>
-                        <td className="px-4 py-3 max-w-[200px] truncate text-foreground font-medium">{draft.subject}</td>
+                        <td className="px-4 py-3 max-w-[200px] truncate text-muted-foreground">{draft.subject}</td>
                         <td className="px-4 py-3">
                           {draft.touchpointCategory && (
                             <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.touchpointCategory}`}>
@@ -223,29 +151,9 @@ export default function CalendarPage() {
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.status}`}>{draft.status}</span>
-                            {draft.deliveryStatus && draft.deliveryStatus !== "pending" && (
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                draft.deliveryStatus === "delivered" ? "bg-green-100 text-green-700" :
-                                draft.deliveryStatus === "bounced" ? "bg-yellow-100 text-yellow-700" :
-                                "bg-red-100 text-red-700"
-                              }`}>{draft.deliveryStatus}</span>
-                            )}
-                          </div>
+                          <span className={`text-xs px-2 py-0.5 rounded-full badge-${draft.status}`}>{draft.status}</span>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{draft.openCount > 0 ? draft.openCount : "—"}</td>
-                        <td className="px-4 py-3">
-                          {draft.status === "failed" && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); manualSendMutation.mutate({ id: draft.id }, { onSuccess: () => { toast.success("Email retry sent!"); }, onError: () => { toast.error("Retry failed"); } }); }}
-                              className="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                              disabled={manualSendMutation.isPending}
-                            >
-                              Retry
-                            </button>
-                          )}
-                        </td>
                       </tr>
                     );
                   })}
@@ -275,40 +183,15 @@ export default function CalendarPage() {
               </div>
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
-              
-              {contactHistory && contactHistory.length > 0 && (
-                <div className="bg-muted/20 rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground uppercase">Recent Interactions</p>
-                  {contactHistory.map(h => (
-                    <div key={h.id} className="text-xs space-y-0.5">
-                      <p className="font-medium text-foreground">{h.subject}</p>
-                      <p className="text-muted-foreground">{new Date(h.date).toLocaleDateString()} • {h.type} {h.opens > 0 && `• Opened ${h.opens}x`}</p>
-                    </div>
-                  ))}
-                </div>
+              {selectedDraft.status !== "sent" && (
+                <Button
+                  onClick={() => setConfirmSendDraft(selectedDraft)}
+                  className="mt-4 w-full"
+                  disabled={manualSendMutation.isPending}
+                >
+                  Send Now
+                </Button>
               )}
-              
-              <div className="flex gap-2 mt-4">
-                {selectedDraft.status !== "sent" && (
-                  <Button
-                    onClick={() => setConfirmSendDraft(selectedDraft)}
-                    className="flex-1"
-                    disabled={manualSendMutation.isPending}
-                  >
-                    Send Now
-                  </Button>
-                )}
-                {selectedDraft.status === "sent" && (
-                  <Button
-                    onClick={() => setConfirmResendDraft(selectedDraft)}
-                    variant="outline"
-                    className="flex-1"
-                    disabled={resendMutation.isPending}
-                  >
-                    Resend
-                  </Button>
-                )}
-              </div>
             </div>
           )}
         </DialogContent>
@@ -342,39 +225,6 @@ export default function CalendarPage() {
               className="bg-blue-600 hover:bg-blue-700"
             >
               Send Email
-            </AlertDialogAction>
-          </div>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <AlertDialog open={!!confirmResendDraft} onOpenChange={v => !v && setConfirmResendDraft(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Resend email?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will send a fresh copy of the email to {confirmResendDraft?.contact?.firstName} {confirmResendDraft?.contact?.lastName} with a new tracking ID.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="bg-muted p-3 rounded text-sm max-h-32 overflow-auto">
-            <p className="font-mono text-xs whitespace-pre-wrap">{confirmResendDraft?.body}</p>
-          </div>
-          <div className="flex gap-2 justify-end">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                try {
-                  await resendMutation.mutateAsync({ draftId: confirmResendDraft.id, gmailAccountId: defaultGmailId ?? 0 });
-                  toast.success("Email resent successfully");
-                  setConfirmResendDraft(null);
-                  setSelectedDraft(null);
-                } catch (e) {
-                  toast.error("Failed to resend email");
-                }
-              }}
-              disabled={resendMutation.isPending}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Resend Email
             </AlertDialogAction>
           </div>
         </AlertDialogContent>

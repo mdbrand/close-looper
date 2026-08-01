@@ -196,28 +196,19 @@ export const draftsRouter = router({
       }
       
       const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+      const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;
+      const unsubscribeUrl = `${process.env.VITE_APP_URL ?? ""}/api/unsubscribe/${draft.trackingId}`;
+      const bodyWithTracking = `${draft.body}\n\n---\n<a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
       
-      // Build simple email with tracking pixel and unsubscribe link
-      const appUrl = "https://closelooper.manus.space";
-      const trackingPixelUrl = `${appUrl}/api/track/${draft.trackingId}.gif`;
-      const unsubscribeUrl = `${appUrl}/api/unsubscribe/${draft.trackingId}`;
-      
-      // Create email body with line breaks converted to HTML
-      const bodyWithTracking = `${draft.body.replace(/\n/g, "<br>")}<br><br><hr><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" alt="" />`;
-      
-      // Create proper MIME email
-      const boundary = "boundary_" + Date.now();
       const emailLines = [
         `From: ${gmailAccount.gmailAddress}`,
         `To: ${contact.email}`,
         `Subject: ${draft.subject}`,
         `MIME-Version: 1.0`,
-        `Content-Type: text/html; charset="UTF-8"`,
-        `Content-Transfer-Encoding: 7bit`,
+        `Content-Type: text/html; charset=utf-8`,
         ``,
-        bodyWithTracking,
+        bodyWithTracking.replace(/\n/g, "<br>"),
       ];
-      
       const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
       const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
       
@@ -229,19 +220,8 @@ export const draftsRouter = router({
       await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
       await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
       
-      await notifyOwner({
-        title: "Email Sent",
-        content: `Your email to ${contact.firstName} ${contact.lastName} has been sent successfully.`,
-      });
-      return { success: true, messageId: sent.data.id, deliveryStatus: "delivered" };
+      return { success: true, messageId: sent.data.id };
     } catch (err: any) {
-      console.error("[manualSend] Error sending email:", {
-        error: err.message,
-        stack: err.stack,
-        draftId: input.id,
-        contactEmail: contact?.email,
-        gmailAddress: gmailAccount?.gmailAddress,
-      });
       await db.updateEmailDraft(input.id, ctx.user.id, { status: "failed" });
       throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to send: ${err.message}` });
     }

@@ -119,10 +119,6 @@ export const emailDrafts = mysqlTable("email_drafts", {
   trackingId: varchar("trackingId", { length: 64 }).notNull(), // unique ID for open tracking pixel
   openCount: int("openCount").default(0).notNull(),
   firstOpenedAt: timestamp("firstOpenedAt"),
-  deliveryStatus: mysqlEnum("deliveryStatus", ["pending", "delivered", "bounced", "failed"]).default("pending").notNull(),
-  retryCount: int("retryCount").default(0).notNull(),
-  lastRetryAt: timestamp("lastRetryAt"),
-  nextRetryAt: timestamp("nextRetryAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -164,16 +160,3 @@ export const feedbackRules = mysqlTable("feedback_rules", {
 
 export type FeedbackRule = typeof feedbackRules.$inferSelect;
 export type InsertFeedbackRule = typeof feedbackRules.$inferInsert;
-
-// ─── Import Batches ─────────────────────────────────────────────────────────
-export const importBatches = mysqlTable("import_batches", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  filename: varchar("filename", { length: 500 }),
-  contactCount: int("contactCount").default(0).notNull(),
-  contactIds: text("contactIds"), // JSON array of imported contact IDs
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
-
-export type ImportBatch = typeof importBatches.$inferSelect;
-export type InsertImportBatch = typeof importBatches.$inferInsert;

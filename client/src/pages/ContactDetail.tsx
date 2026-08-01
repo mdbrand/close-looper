@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles, Clock, MoreVertical } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Send } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import ContactForm from "@/components/ContactForm";
 
@@ -17,6 +19,8 @@ export default function ContactDetail() {
   const [showEdit, setShowEdit] = useState(false);
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedTouchpointId, setSelectedTouchpointId] = useState<number | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<any>(null);
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
 
   const contactId = parseInt(id ?? "0");
   const { data: contact, isLoading, refetch } = trpc.contacts.get.useQuery({ id: contactId }, { enabled: !!contactId });
@@ -32,6 +36,11 @@ export default function ContactDetail() {
 
   const generateMutation = trpc.drafts.generate.useMutation({
     onSuccess: () => { toast.success("Draft generated and added to queue!"); setShowGenerateDialog(false); },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const manualSendMutation = trpc.drafts.manualSend.useMutation({
+    onSuccess: () => { toast.success("Email sent!"); setSelectedEmail(null); setShowSendConfirm(false); },
     onError: (e) => toast.error(e.message),
   });
 
@@ -189,7 +198,7 @@ export default function ContactDetail() {
             <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wide mb-3">Email History</h3>
             <div className="space-y-2">
               {contactDrafts.slice(0, 5).map(draft => (
-                <div key={draft.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <div key={draft.id} className="flex items-center justify-between py-2 border-b border-border last:border-0 cursor-pointer hover:bg-muted/30 rounded-lg px-2 -mx-2 transition-colors" onClick={() => setSelectedEmail(draft)}>
                   <div>
                     <p className="text-sm font-medium">{draft.subject}</p>
                     <p className="text-xs text-muted-foreground">{draft.touchpointName} · {draft.touchpointCategory}</p>
@@ -231,7 +240,64 @@ export default function ContactDetail() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Email Detail Dialog */}
+      <Dialog open={!!selectedEmail} onOpenChange={v => { if (!v) setSelectedEmail(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">{selectedEmail?.subject}</DialogTitle>
+          </DialogHeader>
+          {selectedEmail && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className={`px-2 py-0.5 rounded-full badge-${selectedEmail.status}`}>{selectedEmail.status}</span>
+                <span>·</span>
+                <span>{selectedEmail.touchpointName}</span>
+                {selectedEmail.sentAt && <><span>·</span><span>Sent {new Date(selectedEmail.sentAt).toLocaleDateString()}</span></>}
+              </div>
+              <div className="bg-muted/30 rounded-lg p-4 text-sm whitespace-pre-wrap leading-relaxed">
+                {selectedEmail.body}
+              </div>
+              {selectedEmail.whyExplanation && (
+                <p className="text-xs text-muted-foreground italic">Why: {selectedEmail.whyExplanation}</p>
+              )}
+              {(selectedEmail.status === "pending" || selectedEmail.status === "approved") && (
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => setShowSendConfirm(true)}
+                  disabled={manualSendMutation.isPending}
+                >
+                  <Send className="w-4 h-4" />
+                  {manualSendMutation.isPending ? "Sending..." : "Send Now"}
+                </Button>
+              )}
+              {selectedEmail.status === "sent" && (
+                <div className="text-xs text-muted-foreground text-center">
+                  {selectedEmail.openCount > 0 ? `Opened ${selectedEmail.openCount} time${selectedEmail.openCount > 1 ? "s" : ""}` : "Not opened yet"}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Confirmation */}
+      <AlertDialog open={showSendConfirm} onOpenChange={setShowSendConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Send this email now?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will send "{selectedEmail?.subject}" to {contact.firstName} immediately from your connected Gmail account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { if (selectedEmail) manualSendMutation.mutate({ id: selectedEmail.id }); }}>
+              Send Now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
-
