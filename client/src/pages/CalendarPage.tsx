@@ -246,8 +246,14 @@ export default function CalendarPage() {
               )}
               {defaultSignature && selectedDraft.status !== "sent" && !isEditing && (
                 <div className="border-t border-dashed border-border pt-3">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Signature: {defaultSignature.name}</p>
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap">{defaultSignature.content}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Signature Preview — {defaultSignature.name}</p>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Default</span>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap text-foreground border border-border/50">
+                    {defaultSignature.content}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 italic">This will appear below the email body when sent.</p>
                 </div>
               )}
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}

@@ -95,4 +95,15 @@ export const signaturesRouter = router({
         .where(and(eq(emailSignatures.id, input.id), eq(emailSignatures.userId, ctx.user.id)));
       return { success: true };
     }),
+  setDefault: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      // Clear all defaults for this user
+      await db.update(emailSignatures).set({ isDefault: false }).where(eq(emailSignatures.userId, ctx.user.id));
+      // Set the selected one as default
+      await db.update(emailSignatures).set({ isDefault: true }).where(and(eq(emailSignatures.id, input.id), eq(emailSignatures.userId, ctx.user.id)));
+      return { success: true };
+    }),
 });

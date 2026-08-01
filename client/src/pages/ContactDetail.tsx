@@ -395,6 +395,18 @@ export default function ContactDetail() {
               {selectedEmail.whyExplanation && (
                 <p className="text-xs text-muted-foreground italic">Why: {selectedEmail.whyExplanation}</p>
               )}
+              {defaultSignature && (selectedEmail.status === "pending" || selectedEmail.status === "approved") && (
+                <div className="border-t border-dashed border-border pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Signature Preview — {defaultSignature.name}</p>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Default</span>
+                  </div>
+                  <div className="bg-muted/30 rounded-lg p-3 text-sm whitespace-pre-wrap text-foreground border border-border/50">
+                    {defaultSignature.content}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 italic">This will appear below the email body when sent.</p>
+                </div>
+              )}
               {(selectedEmail.status === "pending" || selectedEmail.status === "approved") && (
                 <div className="flex gap-2">
                   <Button
@@ -480,3 +492,4 @@ export default function ContactDetail() {
     </div>
   );
 }
+  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();

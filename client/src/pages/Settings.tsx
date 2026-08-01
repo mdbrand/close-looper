@@ -51,6 +51,10 @@ export default function Settings() {
     onSuccess: () => { toast.success("Signature deleted"); refetchSigs(); },
     onError: (e) => toast.error(e.message),
   });
+  const setDefaultSigMutation = trpc.signatures.setDefault.useMutation({
+    onSuccess: () => { toast.success("Default signature updated"); refetchSigs(); },
+    onError: (e) => toast.error(e.message),
+  });
 
   // Handle OAuth callback params
   useEffect(() => {
@@ -249,7 +253,7 @@ export default function Settings() {
                       </div>
                       <div className="flex gap-1">
                         {!sig.isDefault && (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => updateSigMutation.mutate({ id: sig.id, isDefault: true })}>Set Default</Button>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setDefaultSigMutation.mutate({ id: sig.id })} disabled={setDefaultSigMutation.isPending}>Set Default</Button>
                         )}
                         <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingSig({ ...sig })}>Edit</Button>
                         <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => { if (confirm("Delete this signature?")) deleteSigMutation.mutate({ id: sig.id }); }}>Delete</Button>
