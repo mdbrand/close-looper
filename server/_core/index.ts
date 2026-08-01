@@ -7,6 +7,8 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { verifyGmailState } from "./crypto";
+import { sdk } from "./sdk";
 import { serveStatic, setupVite } from "./vite";
 import { recordEmailOpen, getEmailDraftByTrackingId, upsertGmailAccount, createEmailEvent } from "../db";
 import { generateDraftsHandler } from "../scheduled/generateDrafts";
@@ -72,6 +74,28 @@ async function startServer() {
     const { code, state, error } = req.query as Record<string, string>;
     if (error) return res.redirect(`/settings?gmailError=${encodeURIComponent(error)}`);
     if (!code || !state) return res.redirect("/settings?gmailError=missing_params");
+
+    // Two independent checks, both required:
+    //  1. the state must carry our HMAC, so the user id in it cannot be forged;
+    //  2. it must match the session actually making this request, so a signed
+    //     state captured from another user is useless.
+    const verified = verifyGmailState(state);
+    if (!verified) return res.redirect("/settings?gmailError=invalid_state");
+
+    let sessionUserId: number;
+    try {
+      const sessionUser = await sdk.authenticateRequest(req);
+      sessionUserId = sessionUser.id;
+    } catch {
+      return res.redirect("/settings?gmailError=not_signed_in");
+    }
+    if (sessionUserId !== verified.userId) {
+      console.warn(
+        `[Gmail OAuth] state/session mismatch: state=${verified.userId} session=${sessionUserId}`
+      );
+      return res.redirect("/settings?gmailError=invalid_state");
+    }
+
     try {
       const { google } = await import("googleapis");
       const oauth2Client = new google.auth.OAuth2(
@@ -85,9 +109,8 @@ async function startServer() {
       const { data: userInfo } = await oauth2.userinfo.get();
       const gmailAddress = userInfo.email;
       if (!gmailAddress) return res.redirect("/settings?gmailError=no_email");
-      const userId = parseInt(state);
       await upsertGmailAccount({
-        userId,
+        userId: verified.userId,
         gmailAddress,
         accessToken: tokens.access_token ?? "",
         refreshToken: tokens.refresh_token ?? null,

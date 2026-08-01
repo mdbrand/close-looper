@@ -75,6 +75,21 @@ Return JSON with exactly these fields:
   return JSON.parse(content);
 }
 
+/**
+ * Rejects a Gmail account id the caller does not own.
+ *
+ * `gmailAccountId` arrives from the client on approve/edit and is later used to
+ * pick the OAuth credentials to send with. Unvalidated, a user could point a
+ * draft at another tenant's account and send mail out of their mailbox.
+ */
+async function assertOwnsGmailAccount(gmailAccountId: number | undefined, userId: number) {
+  if (gmailAccountId === undefined) return;
+  const account = await db.getGmailAccount(gmailAccountId, userId);
+  if (!account) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Gmail account not found." });
+  }
+}
+
 export const draftsRouter = router({
   list: protectedProcedure.input(z.object({
     status: z.enum(["pending", "approved", "sent", "skipped", "failed"]).optional(),
@@ -132,6 +147,7 @@ export const draftsRouter = router({
   approve: protectedProcedure.input(z.object({ id: z.number(), gmailAccountId: z.number().optional() })).mutation(async ({ ctx, input }) => {
     const draft = await db.getEmailDraft(input.id, ctx.user.id);
     if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
+    await assertOwnsGmailAccount(input.gmailAccountId, ctx.user.id);
     await db.updateEmailDraft(input.id, ctx.user.id, {
       status: "approved",
       gmailAccountId: input.gmailAccountId ?? draft.gmailAccountId,
@@ -146,6 +162,7 @@ export const draftsRouter = router({
     gmailAccountId: z.number().optional(),
   })).mutation(async ({ ctx, input }) => {
     const { id, ...updates } = input;
+    await assertOwnsGmailAccount(updates.gmailAccountId, ctx.user.id);
     await db.updateEmailDraft(id, ctx.user.id, updates);
     return { success: true };
   }),
@@ -161,17 +178,20 @@ export const draftsRouter = router({
     if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
     
     const gmailAccount = draft.gmailAccountId
-      ? await db.getGmailAccount(draft.gmailAccountId)
+      ? await db.getGmailAccount(draft.gmailAccountId, ctx.user.id)
       : (await db.getGmailAccounts(ctx.user.id)).find(a => a.isDefault);
-    
+
     if (!gmailAccount) throw new TRPCError({ code: "BAD_REQUEST", message: "No Gmail account configured" });
+    if (!gmailAccount.accessToken) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail credentials unreadable. Please reconnect your Gmail account in Settings." });
+    }
     
     const contact = await db.getContact(draft.contactId, ctx.user.id);
     if (!contact) throw new TRPCError({ code: "NOT_FOUND" });
 
     // Check suppression list before sending
     if (contact.email) {
-      const suppressed = await db.isEmailSuppressed(contact.email);
+      const suppressed = await db.isEmailSuppressed(contact.email, ctx.user.id);
       if (suppressed) throw new TRPCError({ code: "BAD_REQUEST", message: `${contact.email} has unsubscribed or bounced. Cannot send to suppressed contacts.` });
     }
     
@@ -260,9 +280,12 @@ export const draftsRouter = router({
       await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
       await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
       
+      // notifyOwner reaches the Manus *project owner*, not the sending user, so
+      // it must not carry tenant data. Contact names belong only in surfaces
+      // scoped to the user who owns the contact.
       await notifyOwner({
         title: "Email Sent",
-        content: `Your email to ${contact.firstName} ${contact.lastName} has been sent successfully.`,
+        content: "A Close Looper email was sent successfully.",
       });
       // If this is a sequence email, advance the step
       if (draft.sequenceEnrollmentId) {
@@ -304,18 +327,30 @@ export const draftsRouter = router({
   send: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const draft = await db.getEmailDraft(input.id, ctx.user.id);
     if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
-    if (draft.status !== "approved" && draft.status !== "pending") {
+    // The approval queue is the product's core promise: nothing goes out
+    // without a human seeing it. `pending` was previously accepted here, which
+    // made the gate bypassable despite this very message.
+    if (draft.status !== "approved") {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Draft must be approved before sending" });
     }
 
     const contact = await db.getContact(draft.contactId, ctx.user.id);
     if (!contact) throw new TRPCError({ code: "NOT_FOUND", message: "Contact not found" });
 
+    // Mirrors manualSend: an unsubscribed or bounced address must not be mailed
+    // from either send path.
+    if (contact.email && await db.isEmailSuppressed(contact.email, ctx.user.id)) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: `${contact.email} has unsubscribed or bounced. Cannot send to suppressed contacts.` });
+    }
+
     const gmailAccountId = draft.gmailAccountId;
     if (!gmailAccountId) throw new TRPCError({ code: "BAD_REQUEST", message: "No Gmail account selected for this draft" });
 
-    const gmailAccount = await db.getGmailAccount(gmailAccountId);
+    const gmailAccount = await db.getGmailAccount(gmailAccountId, ctx.user.id);
     if (!gmailAccount) throw new TRPCError({ code: "NOT_FOUND", message: "Gmail account not found" });
+    if (!gmailAccount.accessToken) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail credentials unreadable. Please reconnect your Gmail account in Settings." });
+    }
 
     // Build the email with tracking pixel
     const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;

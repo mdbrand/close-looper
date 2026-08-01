@@ -72,10 +72,12 @@ export async function checkRepliesHandler(req: Request, res: Response) {
               await db.updateContact(matchedDraft.contactId, dbUser.id, { loopStatus: "paused" });
               await db.createEmailEvent({ draftId: matchedDraft.id, eventType: "replied" });
 
-              // Notify owner
+              // Reaches the Manus project owner rather than the sending user,
+              // so it carries no contact names or subject lines. The reply and
+              // the auto-pause are both visible in the user's own dashboard.
               await notifyOwner({
-                title: `Close Looper: ${contact.firstName} replied!`,
-                content: `${contact.firstName} ${contact.lastName ?? ""} replied to your email "${matchedDraft.subject}". Their loop has been automatically paused. Follow up with them personally!`,
+                title: "Close Looper: a contact replied",
+                content: "A contact replied to a Close Looper email and their loop was automatically paused. Details are in that user's dashboard.",
               });
 
               repliesFound++;

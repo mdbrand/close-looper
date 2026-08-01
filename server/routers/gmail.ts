@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
+import { signGmailState } from "../_core/crypto";
 import * as db from "../db";
 
 export const gmailRouter = router({
@@ -52,7 +53,9 @@ export const gmailRouter = router({
         "https://www.googleapis.com/auth/userinfo.email",
       ],
       prompt: "consent",
-      state: String(ctx.user.id),
+      // Signed and short-lived. A bare user id here let anyone complete their
+      // own Google consent and name someone else's account in the callback.
+      state: signGmailState(ctx.user.id),
     });
     return { url };
   }),

@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import { decryptSecret, encryptSecret } from "./_core/crypto";
 import {
   AiVoiceProfile,
   Contact,
@@ -96,28 +97,64 @@ export async function upsertVoiceProfile(data: InsertAiVoiceProfile): Promise<vo
 }
 
 // ─── Gmail Accounts ───────────────────────────────────────────────────────────
+
+/**
+ * Decrypts the OAuth tokens on a row read back from storage.
+ *
+ * Decryption failure (rotated JWT_SECRET, tampered row) blanks the tokens
+ * rather than throwing, so listing accounts still works. The send path checks
+ * for an empty access token and asks the user to reconnect Gmail.
+ */
+function decryptAccountTokens(account: GmailAccount): GmailAccount {
+  try {
+    return {
+      ...account,
+      accessToken: decryptSecret(account.accessToken),
+      refreshToken: account.refreshToken ? decryptSecret(account.refreshToken) : account.refreshToken,
+    };
+  } catch (error) {
+    console.error(`[Database] Failed to decrypt tokens for gmail account ${account.id}:`, error);
+    return { ...account, accessToken: "", refreshToken: null };
+  }
+}
+
 export async function getGmailAccounts(userId: number): Promise<GmailAccount[]> {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(gmailAccounts).where(eq(gmailAccounts.userId, userId));
+  const rows = await db.select().from(gmailAccounts).where(eq(gmailAccounts.userId, userId));
+  return rows.map(decryptAccountTokens);
 }
 
-export async function getGmailAccount(id: number): Promise<GmailAccount | undefined> {
+/**
+ * Fetches one Gmail account, scoped to its owner.
+ *
+ * `userId` is required: without it a caller could pass any account id and get
+ * back another tenant's OAuth tokens, which is enough to send mail from their
+ * mailbox.
+ */
+export async function getGmailAccount(id: number, userId: number): Promise<GmailAccount | undefined> {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(gmailAccounts).where(eq(gmailAccounts.id, id)).limit(1);
-  return result[0];
+  const result = await db
+    .select()
+    .from(gmailAccounts)
+    .where(and(eq(gmailAccounts.id, id), eq(gmailAccounts.userId, userId)))
+    .limit(1);
+  return result[0] ? decryptAccountTokens(result[0]) : undefined;
 }
 
 export async function upsertGmailAccount(data: InsertGmailAccount): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  // Encrypt at the storage boundary so callers keep passing plaintext.
+  const accessToken = encryptSecret(data.accessToken);
+  const refreshToken = data.refreshToken ? encryptSecret(data.refreshToken) : data.refreshToken;
   const existing = await db.select().from(gmailAccounts).where(and(eq(gmailAccounts.userId, data.userId), eq(gmailAccounts.gmailAddress, data.gmailAddress))).limit(1);
   if (existing[0]) {
-    await db.update(gmailAccounts).set({ accessToken: data.accessToken, refreshToken: data.refreshToken ?? existing[0].refreshToken, tokenExpiry: data.tokenExpiry }).where(eq(gmailAccounts.id, existing[0].id));
+    await db.update(gmailAccounts).set({ accessToken, refreshToken: refreshToken ?? existing[0].refreshToken, tokenExpiry: data.tokenExpiry }).where(eq(gmailAccounts.id, existing[0].id));
     return existing[0].id;
   }
-  const result = await db.insert(gmailAccounts).values(data);
+  const result = await db.insert(gmailAccounts).values({ ...data, accessToken, refreshToken });
   return (result as any)[0]?.insertId ?? 0;
 }
 
@@ -378,10 +415,21 @@ export async function applyFeedbackRules(text: string, userId: number): Promise<
 }
 
 // ─── Suppression List ────────────────────────────────────────────────────────
-export async function isEmailSuppressed(email: string): Promise<boolean> {
+/**
+ * Whether this user has suppressed this address.
+ *
+ * Scoped to the owner: suppression is a fact about one sender's relationship
+ * with a recipient, not a global blocklist. Unscoped, one tenant's unsubscribe
+ * silently blocked that address for every other tenant.
+ */
+export async function isEmailSuppressed(email: string, userId: number): Promise<boolean> {
   const db = await getDb();
   if (!db) return false;
-  const result = await db.select().from(suppressionList).where(eq(suppressionList.email, email.toLowerCase())).limit(1);
+  const result = await db
+    .select()
+    .from(suppressionList)
+    .where(and(eq(suppressionList.userId, userId), eq(suppressionList.email, email.toLowerCase())))
+    .limit(1);
   return result.length > 0;
 }
 
