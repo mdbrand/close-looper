@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { ArrowLeft, Copy, RotateCcw, ChevronRight, Users, CheckCircle2, Zap, Pencil, X, Save } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function Sequences() {
   const { data: seqs, isLoading, refetch } = trpc.sequences.list.useQuery();
@@ -16,6 +17,17 @@ export default function Sequences() {
   const duplicateMutation = trpc.sequences.duplicate.useMutation({ onSuccess: () => { toast.success("Sequence duplicated!"); refetch(); }, onError: (e: any) => toast.error(e.message) });
   const restoreMutation = trpc.sequences.restoreDefault.useMutation({ onSuccess: () => { toast.success("Default restored!"); refetch(); setSelectedId(null); }, onError: (e: any) => toast.error(e.message) });
   const updateStepMutation = trpc.sequences.updateStep.useMutation({ onSuccess: () => { toast.success("Step saved!"); setEditingStepId(null); refetchDetail(); }, onError: (e: any) => toast.error(e.message) });
+  const generateTemplateMutation = trpc.sequences.generateTemplate.useMutation({
+    onSuccess: (data) => { setEditForm((f: any) => ({ ...f, subjectTemplate: data.subject, emailTemplate: data.body })); toast.success("AI draft generated — review and save!"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const previewMutation = trpc.sequences.previewTemplate.useMutation({
+    onSuccess: (data) => { setPreviewData(data); setShowPreview(true); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<{ subject: string; body: string; contactUsed: string } | null>(null);
+  const [showVarsRef, setShowVarsRef] = useState(false);
 
   const startEditStep = (step: any) => {
     setEditingStepId(step.id);
@@ -41,6 +53,7 @@ export default function Sequences() {
   // Detail view
   if (selectedId && detail) {
     return (
+      <>
       <div className="page-enter max-w-4xl">
         <button onClick={() => setSelectedId(null)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to Sequences
@@ -62,7 +75,7 @@ export default function Sequences() {
         </div>
         <div className="space-y-4">
           {detail.steps?.map((step: any) => (
-            <div key={step.id} className="bg-card border border-border rounded-xl p-5">
+           <div key={step.id} className="bg-card border border-border rounded-xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{step.stepNumber}</span>
@@ -158,6 +171,28 @@ export default function Sequences() {
           ))}
         </div>
       </div>
+      {/* Preview Dialog */}
+      <Dialog open={showPreview} onOpenChange={setShowPreview}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Email Preview</DialogTitle>
+          </DialogHeader>
+          {previewData && (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Previewing with contact: <strong>{previewData.contactUsed}</strong></p>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Subject</p>
+                <p className="text-sm font-medium bg-muted/30 rounded-lg p-2">{previewData.subject}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Body</p>
+                <div className="text-sm bg-muted/30 rounded-lg p-3 whitespace-pre-wrap leading-relaxed">{previewData.body}</div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      </>
     );
   }
 
@@ -211,3 +246,4 @@ export default function Sequences() {
     </div>
   );
 }
+

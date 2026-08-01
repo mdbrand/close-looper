@@ -159,4 +159,84 @@ export const sequencesRouter = router({
     }
     return await seedColdSequence(ctx.user.id);
   }),
+
+  generateTemplate: protectedProcedure.input(z.object({ stepId: z.number() })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    const [step] = await db.select().from(sequenceSteps).where(eq(sequenceSteps.id, input.stepId)).limit(1);
+    if (!step) throw new TRPCError({ code: "NOT_FOUND" });
+    const [seq] = await db.select().from(sequences).where(eq(sequences.id, step.sequenceId)).limit(1);
+    const [senderProfile] = await db.select().from(senderProfiles).where(eq(senderProfiles.userId, ctx.user.id)).limit(1);
+    const [voiceProfile] = await db.select().from(aiVoiceProfiles).where(eq(aiVoiceProfiles.userId, ctx.user.id)).limit(1);
+    const prompt = `Write a reusable email template for Step ${step.stepNumber} of a relationship-building sequence.
+
+STEP: ${step.internalName}
+RELATIONSHIP OBJECTIVE: ${step.relationshipObjective}
+DESIRED RECIPIENT THOUGHT: ${step.desiredRecipientThought ?? ""}
+EMAIL GUIDANCE: ${step.emailGuidance}
+SUGGESTED CLOSING: ${step.suggestedClosing ?? ""}
+CTA: ${step.primaryCallToAction ?? "None"}
+
+SENDER: ${senderProfile?.senderFirstName ?? "Rob"} ${senderProfile?.senderLastName ?? ""}
+COMPANY: ${senderProfile?.companyName ?? ""}
+SERVICE: ${senderProfile?.mainService ?? ""}
+${voiceProfile ? `VOICE STYLE: ${voiceProfile.voiceSample}` : ""}
+
+RULES:
+- Use {{firstName}}, {{company}}, {{industry}} as placeholders for personalization
+- Write in casual, natural 7th-grade language
+- No fluff, no "I hope this finds you well", no fake urgency
+- Keep it between ${step.minimumWordCount}–${step.maximumWordCount} words
+- Make it feel like one person writing to another
+
+Respond in this format:
+SUBJECT: [subject line using {{firstName}} if appropriate]
+BODY: [email body with {{firstName}}, {{company}}, {{industry}} placeholders]`;
+
+    const response = await fetch(`${ENV.forgeApiUrl}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${ENV.forgeApiKey}` },
+      body: JSON.stringify({ model: "claude-sonnet", messages: [{ role: "user", content: prompt }], max_tokens: 500 }),
+    });
+    const result = await response.json() as any;
+    const text = result.choices?.[0]?.message?.content ?? "";
+    const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
+    const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
+    return {
+      subject: subjectMatch?.[1]?.trim() ?? "",
+      body: bodyMatch?.[1]?.trim() ?? text,
+    };
+  }),
+
+  previewTemplate: protectedProcedure.input(z.object({
+    subjectTemplate: z.string(),
+    emailTemplate: z.string(),
+    contactId: z.number().optional(),
+  })).mutation(async ({ ctx, input }) => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+    // Get a sample contact (first contact or specified)
+    let contact: any = null;
+    if (input.contactId) {
+      const [c] = await db.select().from(contacts).where(and(eq(contacts.id, input.contactId), eq(contacts.userId, ctx.user.id))).limit(1);
+      contact = c;
+    } else {
+      const [c] = await db.select().from(contacts).where(eq(contacts.userId, ctx.user.id)).limit(1);
+      contact = c;
+    }
+    const replaceVars = (text: string) => text
+      .replace(/\{\{firstName\}\}/g, contact?.firstName ?? "Alex")
+      .replace(/\{\{lastName\}\}/g, contact?.lastName ?? "Smith")
+      .replace(/\{\{company\}\}/g, contact?.company ?? "Acme Corp")
+      .replace(/\{\{industry\}\}/g, contact?.industry ?? "construction")
+      .replace(/\{\{howWeMet\}\}/g, contact?.howWeMet ?? "the chamber event")
+      .replace(/\{\{personalNotes\}\}/g, contact?.personalNotes ?? "");
+    return {
+      subject: replaceVars(input.subjectTemplate),
+      body: replaceVars(input.emailTemplate),
+      contactUsed: contact ? `${contact.firstName} ${contact.lastName ?? ""}`.trim() : "Sample Contact",
+    };
+  }),
 });
+import { ENV } from "../_core/env";
+import { senderProfiles, aiVoiceProfiles } from "../../drizzle/schema";
