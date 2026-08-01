@@ -217,8 +217,9 @@ export default function CalendarPage() {
                   toast.success("Email sent successfully");
                   setConfirmSendDraft(null);
                   setSelectedDraft(null);
-                } catch (e) {
-                  toast.error("Failed to send email");
+                } catch (e: any) {
+                  console.error("[manualSend] Client error:", e);
+                  toast.error(e?.message || "Failed to send email");
                 }
               }}
               disabled={manualSendMutation.isPending}

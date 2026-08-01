@@ -182,23 +182,31 @@ export const draftsRouter = router({
         expiry_date: gmailAccount.tokenExpiry ?? undefined,
       });
       
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      if (credentials.access_token && credentials.access_token !== gmailAccount.accessToken) {
-        await db.upsertGmailAccount({
-          userId: ctx.user.id,
-          gmailAddress: gmailAccount.gmailAddress,
-          accessToken: credentials.access_token,
-          refreshToken: credentials.refresh_token ?? gmailAccount.refreshToken ?? "",
-          tokenExpiry: credentials.expiry_date ?? null,
-          isDefault: gmailAccount.isDefault,
-        });
-        oauth2Client.setCredentials(credentials);
+      // Refresh token if needed
+      try {
+        const tokenRes = await oauth2Client.getAccessToken();
+        if (tokenRes.token && tokenRes.token !== gmailAccount.accessToken) {
+          const creds = oauth2Client.credentials;
+          await db.upsertGmailAccount({
+            userId: ctx.user.id,
+            gmailAddress: gmailAccount.gmailAddress,
+            accessToken: tokenRes.token,
+            refreshToken: creds.refresh_token ?? gmailAccount.refreshToken ?? "",
+            tokenExpiry: creds.expiry_date ?? null,
+            isDefault: gmailAccount.isDefault,
+          });
+        }
+      } catch (refreshErr: any) {
+        console.error("[manualSend] Token refresh failed:", refreshErr.message);
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail token expired. Please reconnect your Gmail account in Settings." });
       }
-      
+
       const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-      const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;
-      const unsubscribeUrl = `${process.env.VITE_APP_URL ?? ""}/api/unsubscribe/${draft.trackingId}`;
-      const bodyWithTracking = `${draft.body}\n\n---\n<a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
+      const appUrl = "https://closelooper.manus.space";
+      const trackingPixelUrl = `${appUrl}/api/track/${draft.trackingId}.gif`;
+      const unsubscribeUrl = `${appUrl}/api/unsubscribe/${draft.trackingId}`;
+      
+      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p><br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;"><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
       
       const emailLines = [
         `From: ${gmailAccount.gmailAddress}`,
@@ -207,7 +215,7 @@ export const draftsRouter = router({
         `MIME-Version: 1.0`,
         `Content-Type: text/html; charset=utf-8`,
         ``,
-        bodyWithTracking.replace(/\n/g, "<br>"),
+        htmlBody,
       ];
       const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
       const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
@@ -220,10 +228,16 @@ export const draftsRouter = router({
       await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
       await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
       
-      return { success: true, messageId: sent.data.id };
+      await notifyOwner({
+        title: "Email Sent",
+        content: `Your email to ${contact.firstName} ${contact.lastName} has been sent successfully.`,
+      });
+      return { success: true, messageId: sent.data.id, deliveryStatus: "delivered" };
     } catch (err: any) {
+      console.error("[manualSend] FULL ERROR:", err);
+      if (err.code === "UNAUTHORIZED") throw err;
       await db.updateEmailDraft(input.id, ctx.user.id, { status: "failed" });
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to send: ${err.message}` });
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Send failed: ${err.message || "Unknown error"}` });
     }
   }),
 
