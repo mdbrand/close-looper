@@ -26,6 +26,8 @@ export default function Sequences() {
       emailGuidance: step.emailGuidance,
       suggestedClosing: step.suggestedClosing ?? "",
       primaryCallToAction: step.primaryCallToAction ?? "",
+      emailTemplate: step.emailTemplate ?? "",
+      subjectTemplate: step.subjectTemplate ?? "",
     });
   };
 
@@ -107,6 +109,21 @@ export default function Sequences() {
                       <Input value={editForm.primaryCallToAction} onChange={e => setEditForm({ ...editForm, primaryCallToAction: e.target.value })} className="text-sm" />
                     </div>
                   </div>
+                  <div className="border-t border-border pt-3 mt-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="text-xs font-semibold uppercase tracking-wide">Email Template (Optional)</label>
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Overrides AI generation</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2">Write the exact email body here. Use <code className="bg-muted px-1 rounded">{"{{firstName}}"}</code>, <code className="bg-muted px-1 rounded">{"{{company}}"}</code>, <code className="bg-muted px-1 rounded">{"{{industry}}"}</code> for personalization. Leave blank to let AI generate from guidance above.</p>
+                    <div className="mb-2">
+                      <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Subject Line Template</label>
+                      <Input value={editForm.subjectTemplate} onChange={e => setEditForm({ ...editForm, subjectTemplate: e.target.value })} className="text-sm" placeholder="e.g. Hey {{firstName}}, quick note..." />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Email Body Template</label>
+                      <Textarea value={editForm.emailTemplate} onChange={e => setEditForm({ ...editForm, emailTemplate: e.target.value })} rows={8} className="text-sm font-mono" placeholder={"Hey {{firstName}},\n\nJust wanted to reach out...\n\nTalk soon,\nRob"} />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -128,6 +145,13 @@ export default function Sequences() {
                     <span>Closing: {step.suggestedClosing}</span>
                     {step.primaryCallToAction && <span>CTA: {step.primaryCallToAction}</span>}
                   </div>
+                  {step.emailTemplate && (
+                    <div className="mt-3 border-t border-dashed border-border pt-3">
+                      <p className="text-xs font-semibold text-amber-700 mb-1">✓ Custom Email Template Set</p>
+                      {step.subjectTemplate && <p className="text-xs text-muted-foreground mb-1">Subject: {step.subjectTemplate}</p>}
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap line-clamp-3">{step.emailTemplate}</p>
+                    </div>
+                  )}
                 </>
               )}
             </div>

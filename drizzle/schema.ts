@@ -231,6 +231,8 @@ export const sequenceSteps = mysqlTable("sequence_steps", {
   emailGuidance: text("emailGuidance").notNull(),
   suggestedClosing: text("suggestedClosing"),
   primaryCallToAction: text("primaryCallToAction"),
+  emailTemplate: text("emailTemplate"),
+  subjectTemplate: varchar("subjectTemplate", { length: 500 }),
   minimumWordCount: int("minimumWordCount").default(75).notNull(),
   maximumWordCount: int("maximumWordCount").default(150).notNull(),
   delayMonths: int("delayMonths").default(1).notNull(),

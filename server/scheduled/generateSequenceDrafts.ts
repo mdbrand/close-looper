@@ -108,6 +108,25 @@ SUBJECT: [subject line]
 BODY: [email body]`;
 
       // Call LLM
+      // If a custom email template is set, use it directly (only personalize variables)
+      if ((step as any).emailTemplate) {
+        const replaceVars = (text: string) => text
+          .replace(/\{\{firstName\}\}/g, contact.firstName)
+          .replace(/\{\{lastName\}\}/g, contact.lastName ?? "")
+          .replace(/\{\{company\}\}/g, contact.company ?? "")
+          .replace(/\{\{industry\}\}/g, contact.industry ?? "");
+        const subject = replaceVars((step as any).subjectTemplate || `Step ${step.stepNumber}: ${step.internalName}`);
+        const body = replaceVars((step as any).emailTemplate);
+        const trackingId = nanoid(32);
+        const whyExplanation = `Sequence: ${seq.name} · Step ${step.stepNumber} · ${step.internalName} — Custom template`;
+        await db.insert(emailDrafts).values({
+          userId: enrollment.userId, contactId: enrollment.contactId, touchpointId: null,
+          touchpointName: `${seq.name} - Step ${step.stepNumber}`, touchpointCategory: "relationship_sequence",
+          sequenceStepId: step.id, sequenceEnrollmentId: enrollment.id, generationSource: "relationship_sequence",
+          subject, body, whyExplanation, status: "pending", trackingId,
+        });
+        continue;
+      }
       try {
         const response = await fetch(`${ENV.forgeApiUrl}/api/chat`, {
           method: "POST",

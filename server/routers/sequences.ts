@@ -86,6 +86,8 @@ export const sequencesRouter = router({
     maximumWordCount: z.number().optional(),
     delayMonths: z.number().optional(),
     isActive: z.boolean().optional(),
+    emailTemplate: z.string().optional(),
+    subjectTemplate: z.string().optional(),
   })).mutation(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
