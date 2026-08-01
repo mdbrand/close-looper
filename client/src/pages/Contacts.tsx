@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { Plus, Search, MoreVertical, Pencil, Trash2, PauseCircle, PlayCircle, Archive, Zap, User, Building2, Tag, Download, Upload } from "lucide-react";
+import { Plus, Search, MoreVertical, Pencil, Trash2, PauseCircle, PlayCircle, Archive, Zap, User, Building2, Tag, Download, Upload, Camera, Loader2, CheckCircle2 } from "lucide-react";
 import { useLocation } from "wouter";
 import ContactForm from "@/components/ContactForm";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,32 @@ export default function Contacts() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [csvContent, setCsvContent] = useState("");
   const [importPreview, setImportPreview] = useState<any>(null);
+  const [showScanModal, setShowScanModal] = useState(false);
+  const [scanPreview, setScanPreview] = useState<any>(null);
+  const [scanImageUrl, setScanImageUrl] = useState<string>("");
+
+  const scanMutation = trpc.scan.extractContactFromImage.useMutation({
+    onSuccess: (data: any) => { setScanPreview(data.data); },
+    onError: (e: any) => toast.error(e.message || "Could not read image. Try a clearer photo."),
+  });
+  const createFromScanMutation = trpc.contacts.create.useMutation({
+    onSuccess: () => { toast.success("Contact added from scan!"); setShowScanModal(false); setScanPreview(null); setScanImageUrl(""); refetch(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const handleScanUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      setScanImageUrl(dataUrl);
+      const base64 = dataUrl.split(",")[1] ?? "";
+      const mimeType = file.type || "image/jpeg";
+      scanMutation.mutate({ imageBase64: base64, mimeType });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const { data: contacts, isLoading, refetch } = trpc.contacts.list.useQuery();
   const { data: importHistory, refetch: refetchHistory } = trpc.importExport.getImportHistory.useQuery();
@@ -120,15 +146,20 @@ export default function Contacts() {
             {contacts?.length ?? 0} people in your network
           </p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Add Contact
-        </Button>
-        <Button onClick={() => setShowImportModal(true)} variant="outline" className="gap-2">
-          <Upload className="w-4 h-4" /> Import CSV
-        </Button>
-        <Button onClick={handleExport} variant="outline" className="gap-2">
-          <Download className="w-4 h-4" /> Export
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setShowScanModal(true)} variant="outline" className="gap-2">
+            <Camera className="w-4 h-4" /> Scan Card
+          </Button>
+          <Button onClick={() => setShowImportModal(true)} variant="outline" className="gap-2">
+            <Upload className="w-4 h-4" /> Import CSV
+          </Button>
+          <Button onClick={handleExport} variant="outline" className="gap-2">
+            <Download className="w-4 h-4" /> Export
+          </Button>
+          <Button onClick={() => setShowAddDialog(true)} className="gap-2">
+            <Plus className="w-4 h-4" /> Add Contact
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -325,6 +356,85 @@ export default function Contacts() {
           </div>
         </div>
       )}
+      {/* Business Card Scan Modal */}
+    <Dialog open={showScanModal} onOpenChange={v => { setShowScanModal(v); if (!v) { setScanPreview(null); setScanImageUrl(""); } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle className="font-serif text-2xl">Scan Business Card</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Upload a photo of a business card, flyer, or any image with contact info. AI will extract the details automatically.</p>
+            {!scanPreview && (
+              <div className="border-2 border-dashed border-border rounded-lg p-8 text-center">
+                <Camera className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground mb-3">Take a photo or upload an image</p>
+                <input type="file" accept="image/*" capture="environment" onChange={handleScanUpload} className="block mx-auto text-sm" />
+              </div>
+            )}
+            {scanMutation.isPending && (
+              <div className="flex items-center justify-center gap-3 py-6">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Reading contact info from image...</p>
+              </div>
+            )}
+            {scanImageUrl && !scanMutation.isPending && (
+              <img src={scanImageUrl} alt="Scanned" className="w-full max-h-40 object-contain rounded-lg border border-border" />
+            )}
+            {scanPreview && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-3 py-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <p className="text-sm font-medium">Contact info extracted — review and confirm</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: "First Name", key: "firstName" },
+                    { label: "Last Name", key: "lastName" },
+                    { label: "Email", key: "email" },
+                    { label: "Phone", key: "phone" },
+                    { label: "Company", key: "company" },
+                    { label: "Industry", key: "industry" },
+                  ].map(({ label, key }) => (
+                    <div key={key}>
+                      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                      <input
+                        className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background"
+                        value={scanPreview[key] ?? ""}
+                        onChange={e => setScanPreview((p: any) => ({ ...p, [key]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {scanPreview.notes && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Notes</p>
+                    <textarea className="w-full px-2 py-1.5 text-sm border border-border rounded bg-background" rows={2} value={scanPreview.notes} onChange={e => setScanPreview((p: any) => ({ ...p, notes: e.target.value }))} />
+                  </div>
+                )}
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="outline" onClick={() => { setScanPreview(null); setScanImageUrl(""); }}>Re-scan</Button>
+                  <Button
+                    onClick={() => createFromScanMutation.mutate({
+                      firstName: scanPreview.firstName || "Unknown",
+                      lastName: scanPreview.lastName || "",
+                      email: scanPreview.email || "",
+                      phone: scanPreview.phone || "",
+                      company: scanPreview.company || "",
+                      industry: scanPreview.industry || "",
+                      linkedinUrl: scanPreview.linkedinUrl || "",
+                      personalNotes: scanPreview.notes || "",
+                      relationshipType: "referral_partner",
+                      loopStatus: "active",
+                      sendFrequencyWeeks: 4,
+                    })}
+                    disabled={createFromScanMutation.isPending}
+                  >
+                    {createFromScanMutation.isPending ? "Adding..." : "Add Contact"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

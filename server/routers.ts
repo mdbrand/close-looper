@@ -38,7 +38,9 @@ export const appRouter = router({
   signatures: signaturesRouter,
   senderProfile: senderProfileRouter,
   sequences: sequencesRouter,
+  scan: scanRouter,
 });
 
 export type AppRouter = typeof appRouter;
 import { sequencesRouter } from "./routers/sequences";
+import { scanRouter } from "./routers/scan";
