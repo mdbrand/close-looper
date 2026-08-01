@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { nanoid } from "nanoid";
-import { invokeLLM } from "../_core/llm";
 import { notifyOwner } from "../_core/notification";
 import * as db from "../db";
+import { generateTouchpointEmail } from "../generateEmail";
 
 // Picks the best upcoming touchpoint for a contact based on their industry and upcoming dates
 function pickTouchpoint(touchpoints: Awaited<ReturnType<typeof db.getTouchpoints>>, contact: Awaited<ReturnType<typeof db.getContact>>) {
@@ -52,10 +52,18 @@ export async function generateDraftsHandler(req: Request, res: Response) {
 
     let totalGenerated = 0;
 
+    // Touchpoints are global, so they are fetched once for the whole run
+    // rather than once per user.
+    const touchpoints = await db.getTouchpoints();
+
     for (const dbUser of allUsers) {
       const contacts = await db.getActiveContactsForCron(dbUser.id);
-      const touchpoints = await db.getTouchpoints();
       const voiceProfile = await db.getVoiceProfile(dbUser.id);
+
+      // Fetched once per user. This used to run inside the contact loop, so a
+      // user with N contacts issued N full scans of their own pending drafts.
+      const pendingDrafts = await db.getEmailDrafts(dbUser.id, "pending");
+      const contactsWithPendingDraft = new Set(pendingDrafts.map(d => d.contactId));
 
       for (const contact of contacts) {
         // Check if contact is due for a touch (based on sendFrequencyWeeks)
@@ -67,10 +75,7 @@ export async function generateDraftsHandler(req: Request, res: Response) {
 
         if (weeksSinceLast < contact.sendFrequencyWeeks) continue; // Not due yet
 
-        // Check if there's already a pending draft for this contact
-        const existingDrafts = await db.getEmailDrafts(dbUser.id, "pending");
-        const hasExisting = existingDrafts.some(d => d.contactId === contact.id);
-        if (hasExisting) continue;
+        if (contactsWithPendingDraft.has(contact.id)) continue;
 
         // Pick a touchpoint
         const picked = pickTouchpoint(touchpoints, contact);
@@ -80,65 +85,13 @@ export async function generateDraftsHandler(req: Request, res: Response) {
 
         // Generate the email with AI
         try {
-          const voiceContext = voiceProfile
-            ? `Here is how the sender naturally writes/talks (match this voice exactly):\n"${voiceProfile.voiceSample}"\nStyle notes: ${voiceProfile.styleNotes ?? "casual, friendly, direct"}`
-            : "Write in a casual, friendly, direct voice — like texting a friend.";
-
-          const personalContext = [
-            contact.personalNotes ? `Personal notes about them: ${contact.personalNotes}` : null,
-            contact.industry ? `They work in: ${contact.industry}` : null,
-            contact.company ? `Their company: ${contact.company}` : null,
-            contact.howWeMet ? `How we met: ${contact.howWeMet}` : null,
-          ].filter(Boolean).join("\n");
-
-          const prompt = `You are writing a short, casual top-of-mind email from me to ${contact.firstName}${contact.lastName ? " " + contact.lastName : ""}.
-
-The reason for the email is: ${tp.name} — ${tp.description ?? tp.name}
-
-${personalContext ? `Context about this person:\n${personalContext}\n` : ""}
-${voiceContext}
-
-Rules:
-- 7th grade reading level — simple words, short sentences
-- NO fluff, NO "I hope this email finds you well", NO corporate speak
-- Sound like a real person dashing off a quick note, not a marketer
-- 3-5 sentences max for the body
-- The subject line should be short and feel personal (like a text preview), not a marketing headline
-- End with something warm but brief — no long sign-offs
-- Do NOT mention the holiday/event name awkwardly — weave it in naturally
-
-Return JSON with exactly these fields:
-{
-  "subject": "short subject line here",
-  "body": "full email body here (plain text, no HTML)",
-  "whyExplanation": "one sentence explaining why this touchpoint was chosen for this contact"
-}`;
-
-          const response = await invokeLLM({
-            messages: [{ role: "user", content: prompt }],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "email_draft",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    subject: { type: "string" },
-                    body: { type: "string" },
-                    whyExplanation: { type: "string" },
-                  },
-                  required: ["subject", "body", "whyExplanation"],
-                  additionalProperties: false,
-                },
-              },
-            },
-          });
-
-          const rawContent = response.choices[0]?.message?.content;
-          const content = typeof rawContent === "string" ? rawContent : null;
-          if (!content) continue;
-          const generated = JSON.parse(content);
+          const generated = await generateTouchpointEmail(
+            contact,
+            tp.name,
+            tp.description ?? tp.name,
+            voiceProfile,
+            dbUser.id
+          );
           const trackingId = nanoid(32);
 
           await db.createEmailDraft({
@@ -155,6 +108,7 @@ Return JSON with exactly these fields:
             scheduledSendAt: date,
           });
 
+          contactsWithPendingDraft.add(contact.id);
           totalGenerated++;
         } catch (err) {
           console.error(`[Cron] Failed to generate draft for contact ${contact.id}:`, err);
@@ -173,6 +127,7 @@ Return JSON with exactly these fields:
     res.json({ ok: true, generated: totalGenerated });
   } catch (err: any) {
     console.error("[Cron] generateDrafts error:", err);
-    res.status(500).json({ error: err.message, stack: err.stack, timestamp: new Date().toISOString() });
+    // Stack traces stay in the logs, not in the HTTP response.
+    res.status(500).json({ error: "generateDrafts failed", timestamp: new Date().toISOString() });
   }
 }

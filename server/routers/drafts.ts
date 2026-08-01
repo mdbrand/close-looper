@@ -2,78 +2,9 @@ import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { invokeLLM } from "../_core/llm";
 import * as db from "../db";
-import { notifyOwner } from "../_core/notification";
-
-async function generateEmailWithAI(
-  contact: Awaited<ReturnType<typeof db.getContact>>,
-  touchpointName: string,
-  touchpointDescription: string,
-  voiceProfile: Awaited<ReturnType<typeof db.getVoiceProfile>>
-): Promise<{ subject: string; body: string; whyExplanation: string }> {
-  if (!contact) throw new Error("Contact not found");
-
-  const voiceContext = voiceProfile
-    ? `Here is how the sender naturally writes/talks (match this voice exactly):\n"${voiceProfile.voiceSample}"\nStyle notes: ${voiceProfile.styleNotes ?? "casual, friendly, direct"}`
-    : "Write in a casual, friendly, direct voice — like texting a friend.";
-
-  const personalContext = [
-    contact.personalNotes ? `Personal notes about them: ${contact.personalNotes}` : null,
-    contact.industry ? `They work in: ${contact.industry}` : null,
-    contact.company ? `Their company: ${contact.company}` : null,
-    contact.howWeMet ? `How we met: ${contact.howWeMet}` : null,
-  ].filter(Boolean).join("\n");
-
-  const prompt = `You are writing a short, casual top-of-mind email from me to ${contact.firstName}${contact.lastName ? " " + contact.lastName : ""}.
-
-The reason for the email is: ${touchpointName} — ${touchpointDescription}
-
-${personalContext ? `Context about this person:\n${personalContext}\n` : ""}
-${voiceContext}
-
-Rules:
-- 7th grade reading level — simple words, short sentences
-- NO fluff, NO "I hope this email finds you well", NO corporate speak
-- Sound like a real person dashing off a quick note, not a marketer
-- 3-5 sentences max for the body
-- The subject line should be short and feel personal (like a text preview), not a marketing headline
-- End with something warm but brief — no long sign-offs
-- Do NOT mention the holiday/event name awkwardly — weave it in naturally
-
-Return JSON with exactly these fields:
-{
-  "subject": "short subject line here",
-  "body": "full email body here (plain text, no HTML)",
-  "whyExplanation": "one sentence explaining why this touchpoint was chosen for this contact"
-}`;
-
-  const response = await invokeLLM({
-    messages: [{ role: "user", content: prompt }],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "email_draft",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            subject: { type: "string" },
-            body: { type: "string" },
-            whyExplanation: { type: "string" },
-          },
-          required: ["subject", "body", "whyExplanation"],
-          additionalProperties: false,
-        },
-      },
-    },
-  });
-
-  const rawContent = response.choices[0]?.message?.content;
-  const content = typeof rawContent === "string" ? rawContent : null;
-  if (!content) throw new Error("No response from AI");
-  return JSON.parse(content);
-}
+import { sendDraft } from "../sendDraft";
+import { generateTouchpointEmail } from "../generateEmail";
 
 /**
  * Rejects a Gmail account id the caller does not own.
@@ -95,12 +26,11 @@ export const draftsRouter = router({
     status: z.enum(["pending", "approved", "sent", "skipped", "failed"]).optional(),
   })).query(async ({ ctx, input }) => {
     const drafts = await db.getEmailDrafts(ctx.user.id, input.status);
-    // Attach contact info to each draft
-    const enriched = await Promise.all(drafts.map(async (draft) => {
-      const contact = await db.getContact(draft.contactId, ctx.user.id);
-      return { ...draft, contact };
-    }));
-    return enriched;
+    // One query for the whole page rather than one per draft: the queue used to
+    // issue a contact lookup for every row, and many rows share a contact.
+    const contacts = await db.getContacts(ctx.user.id);
+    const byId = new Map(contacts.map(c => [c.id, c]));
+    return drafts.map(draft => ({ ...draft, contact: byId.get(draft.contactId) }));
   }),
 
   generate: protectedProcedure.input(z.object({
@@ -125,7 +55,7 @@ export const draftsRouter = router({
       if (tp) { tpName = tp.name; tpDesc = tp.description ?? tpName; tpCategory = tp.category; }
     }
 
-    const generated = await generateEmailWithAI(contact, tpName, tpDesc, voiceProfile);
+    const generated = await generateTouchpointEmail(contact, tpName, tpDesc, voiceProfile, ctx.user.id);
     const trackingId = nanoid(32);
 
     const id = await db.createEmailDraft({
@@ -172,158 +102,17 @@ export const draftsRouter = router({
     return { success: true };
   }),
 
+  /**
+   * Send immediately, outside the approval queue (Calendar / Contact Detail
+   * "Send Now"). Deliberately does not require `approved` — the user is taking
+   * the action by hand on a draft in front of them.
+   */
   manualSend: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
-    const draft = await db.getEmailDraft(input.id, ctx.user.id);
-    if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
-    if (draft.status === "sent") throw new TRPCError({ code: "BAD_REQUEST", message: "Email already sent" });
-    
-    const gmailAccount = draft.gmailAccountId
-      ? await db.getGmailAccount(draft.gmailAccountId, ctx.user.id)
-      : (await db.getGmailAccounts(ctx.user.id)).find(a => a.isDefault);
-
-    if (!gmailAccount) throw new TRPCError({ code: "BAD_REQUEST", message: "No Gmail account configured" });
-    if (!gmailAccount.accessToken) {
-      throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail credentials unreadable. Please reconnect your Gmail account in Settings." });
-    }
-    
-    const contact = await db.getContact(draft.contactId, ctx.user.id);
-    if (!contact) throw new TRPCError({ code: "NOT_FOUND" });
-
-    // Check suppression list before sending
-    if (contact.email) {
-      const suppressed = await db.isEmailSuppressed(contact.email, ctx.user.id);
-      if (suppressed) throw new TRPCError({ code: "BAD_REQUEST", message: `${contact.email} has unsubscribed or bounced. Cannot send to suppressed contacts.` });
-    }
-    
-    try {
-      const { google } = await import("googleapis");
-      const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI
-      );
-      oauth2Client.setCredentials({
-        access_token: gmailAccount.accessToken,
-        refresh_token: gmailAccount.refreshToken ?? undefined,
-        expiry_date: gmailAccount.tokenExpiry ?? undefined,
-      });
-      
-      // Refresh token if needed
-      try {
-        const tokenRes = await oauth2Client.getAccessToken();
-        if (tokenRes.token && tokenRes.token !== gmailAccount.accessToken) {
-          const creds = oauth2Client.credentials;
-          await db.upsertGmailAccount({
-            userId: ctx.user.id,
-            gmailAddress: gmailAccount.gmailAddress,
-            accessToken: tokenRes.token,
-            refreshToken: creds.refresh_token ?? gmailAccount.refreshToken ?? "",
-            tokenExpiry: creds.expiry_date ?? null,
-            isDefault: gmailAccount.isDefault,
-          });
-        }
-      } catch (refreshErr: any) {
-        console.error("[manualSend] Token refresh failed:", refreshErr.message);
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail token expired. Please reconnect your Gmail account in Settings." });
-      }
-
-      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-      const appUrl = "https://closelooper.manus.space";
-      const trackingPixelUrl = `${appUrl}/api/track/${draft.trackingId}.gif`;
-      const unsubscribeUrl = `${appUrl}/api/unsubscribe/${draft.trackingId}`;
-      
-      // Get default signature
-      const { emailSignatures } = await import("../../drizzle/schema");
-      const { eq: eqOp, and: andOp } = await import("drizzle-orm");
-      const database = await db.getDb();
-      let signatureHtml = "";
-      if (database) {
-        // Try default signature first, fall back to any signature
-        let sigs = await database.select().from(emailSignatures).where(andOp(eqOp(emailSignatures.userId, ctx.user.id), eqOp(emailSignatures.isDefault, 1 as unknown as boolean))).limit(1);
-        if (!sigs[0]) {
-          sigs = await database.select().from(emailSignatures).where(eqOp(emailSignatures.userId, ctx.user.id)).limit(1);
-        }
-        if (sigs[0]?.content) {
-          signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;font-family:inherit;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
-        }
-      }
-
-      // Get mailing address from sender profile for CAN-SPAM compliance
-      const { senderProfiles } = await import("../../drizzle/schema");
-      let mailingAddress = "";
-      if (database) {
-        const profiles = await database.select().from(senderProfiles).where(eqOp(senderProfiles.userId, ctx.user.id)).limit(1);
-        if (profiles[0]?.mailingAddress) {
-          mailingAddress = `<p style="font-size:11px;color:#999;margin-top:4px;">${profiles[0].mailingAddress}</p>`;
-        }
-      }
-      
-      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p>${signatureHtml}<br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;">${mailingAddress}<p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
-      
-      const emailLines = [
-        `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
-        `To: ${contact.email}`,
-        `Subject: ${draft.subject}`,
-        `MIME-Version: 1.0`,
-        `Content-Type: text/html; charset=utf-8`,
-        ``,
-        htmlBody,
-      ];
-      const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
-      const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
-      
-      await db.updateEmailDraft(input.id, ctx.user.id, {
-        status: "sent",
-        sentAt: new Date(),
-        gmailMessageId: sent.data.id ?? null,
-      });
-      await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
-      await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
-      
-      // notifyOwner reaches the Manus *project owner*, not the sending user, so
-      // it must not carry tenant data. Contact names belong only in surfaces
-      // scoped to the user who owns the contact.
-      await notifyOwner({
-        title: "Email Sent",
-        content: "A Close Looper email was sent successfully.",
-      });
-      // If this is a sequence email, advance the step
-      if (draft.sequenceEnrollmentId) {
-        try {
-          const { contactSequenceEnrollments } = await import("../../drizzle/schema");
-          const database = await db.getDb();
-          if (database) {
-            const { eq: eqOp2 } = await import("drizzle-orm");
-            const [enrollment] = await database.select().from(contactSequenceEnrollments).where(eqOp2(contactSequenceEnrollments.id, draft.sequenceEnrollmentId)).limit(1);
-            if (enrollment) {
-              const nextStep = enrollment.currentStepNumber + 1;
-              const nextDate = new Date();
-              nextDate.setMonth(nextDate.getMonth() + 1);
-              nextDate.setDate(15);
-              nextDate.setHours(10, 0, 0, 0);
-              const dow = nextDate.getDay();
-              if (dow === 0) nextDate.setDate(nextDate.getDate() + 2);
-              if (dow === 6) nextDate.setDate(nextDate.getDate() + 3);
-              if (nextStep > 12) {
-                await database.update(contactSequenceEnrollments).set({ status: "completed", completedAt: new Date(), currentStepNumber: 12 }).where(eqOp2(contactSequenceEnrollments.id, enrollment.id));
-              } else {
-                await database.update(contactSequenceEnrollments).set({ currentStepNumber: nextStep, nextSendAt: nextDate }).where(eqOp2(contactSequenceEnrollments.id, enrollment.id));
-              }
-            }
-          }
-        } catch (seqErr) {
-          console.error("[manualSend] Sequence advancement error:", seqErr);
-        }
-      }
-      return { success: true, messageId: sent.data.id, deliveryStatus: "delivered" };
-    } catch (err: any) {
-      console.error("[manualSend] FULL ERROR:", err);
-      if (err.code === "UNAUTHORIZED") throw err;
-      await db.updateEmailDraft(input.id, ctx.user.id, { status: "failed" });
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Send failed: ${err.message || "Unknown error"}` });
-    }
+    const result = await sendDraft(input.id, ctx.user.id);
+    return { ...result, deliveryStatus: "delivered" as const };
   }),
 
+  /** Send from the approval queue. Requires a human to have approved first. */
   send: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
     const draft = await db.getEmailDraft(input.id, ctx.user.id);
     if (!draft) throw new TRPCError({ code: "NOT_FOUND" });
@@ -333,83 +122,7 @@ export const draftsRouter = router({
     if (draft.status !== "approved") {
       throw new TRPCError({ code: "BAD_REQUEST", message: "Draft must be approved before sending" });
     }
-
-    const contact = await db.getContact(draft.contactId, ctx.user.id);
-    if (!contact) throw new TRPCError({ code: "NOT_FOUND", message: "Contact not found" });
-
-    // Mirrors manualSend: an unsubscribed or bounced address must not be mailed
-    // from either send path.
-    if (contact.email && await db.isEmailSuppressed(contact.email, ctx.user.id)) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: `${contact.email} has unsubscribed or bounced. Cannot send to suppressed contacts.` });
-    }
-
-    const gmailAccountId = draft.gmailAccountId;
-    if (!gmailAccountId) throw new TRPCError({ code: "BAD_REQUEST", message: "No Gmail account selected for this draft" });
-
-    const gmailAccount = await db.getGmailAccount(gmailAccountId, ctx.user.id);
-    if (!gmailAccount) throw new TRPCError({ code: "NOT_FOUND", message: "Gmail account not found" });
-    if (!gmailAccount.accessToken) {
-      throw new TRPCError({ code: "UNAUTHORIZED", message: "Gmail credentials unreadable. Please reconnect your Gmail account in Settings." });
-    }
-
-    // Build the email with tracking pixel
-    const trackingPixelUrl = `${process.env.VITE_APP_URL ?? ""}/api/track/${draft.trackingId}.gif`;
-    const unsubscribeUrl = `${process.env.VITE_APP_URL ?? ""}/api/unsubscribe/${draft.trackingId}`;
-    const bodyWithTracking = `${draft.body}\n\n---\n<a href="${unsubscribeUrl}" style="color:#999;font-size:11px;">Unsubscribe</a><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" />`;
-
-    try {
-      const { google } = await import("googleapis");
-      const oauth2Client = new google.auth.OAuth2(
-        process.env.GOOGLE_CLIENT_ID,
-        process.env.GOOGLE_CLIENT_SECRET,
-        process.env.GOOGLE_REDIRECT_URI
-      );
-      oauth2Client.setCredentials({
-        access_token: gmailAccount.accessToken,
-        refresh_token: gmailAccount.refreshToken ?? undefined,
-        expiry_date: gmailAccount.tokenExpiry ?? undefined,
-      });
-
-      // Refresh token if needed
-      const { credentials } = await oauth2Client.refreshAccessToken();
-      if (credentials.access_token && credentials.access_token !== gmailAccount.accessToken) {
-        await db.upsertGmailAccount({
-          userId: ctx.user.id,
-          gmailAddress: gmailAccount.gmailAddress,
-          accessToken: credentials.access_token,
-          refreshToken: credentials.refresh_token ?? gmailAccount.refreshToken ?? "",
-          tokenExpiry: credentials.expiry_date ?? null,
-          isDefault: gmailAccount.isDefault,
-        });
-        oauth2Client.setCredentials(credentials);
-      }
-
-      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-      const emailLines = [
-        `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
-        `To: ${contact.email}`,
-        `Subject: ${draft.subject}`,
-        `MIME-Version: 1.0`,
-        `Content-Type: text/html; charset=utf-8`,
-        ``,
-        bodyWithTracking.replace(/\n/g, "<br>"),
-      ];
-      const raw = Buffer.from(emailLines.join("\r\n")).toString("base64url");
-      const sent = await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
-
-      await db.updateEmailDraft(input.id, ctx.user.id, {
-        status: "sent",
-        sentAt: new Date(),
-        gmailMessageId: sent.data.id ?? null,
-      });
-      await db.createEmailEvent({ draftId: draft.id, eventType: "sent" });
-      await db.updateContact(draft.contactId, ctx.user.id, { lastTouchSentAt: new Date() });
-
-      return { success: true, messageId: sent.data.id };
-    } catch (err: any) {
-      await db.updateEmailDraft(input.id, ctx.user.id, { status: "failed" });
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Failed to send: ${err.message}` });
-    }
+    return sendDraft(input.id, ctx.user.id);
   }),
 
   scheduleSend: protectedProcedure
