@@ -41,7 +41,7 @@ export const analyticsRouter = router({
   }),
 
   topEngaged: protectedProcedure.query(async ({ ctx }) => {
-    const drafts = await db.getEmailDrafts(ctx.user.id, "sent");
+  const drafts = await db.getEmailDrafts(ctx.user.id, "sent");
     // Group by contact and sum open counts
     const contactOpens: Record<number, { contactId: number; totalOpens: number; emailsSent: number }> = {};
     for (const draft of drafts) {
@@ -58,4 +58,21 @@ export const analyticsRouter = router({
     }));
     return enriched.filter(e => e.contact);
   }),
+
+  pipeline: protectedProcedure.query(async ({ ctx }) => {
+    const database = await getDb();
+    if (!database) return { cold: 0, warm: 0, hot: 0, inSequence: 0, inTouchpoints: 0, sequenceReplies: 0, sequenceCompletions: 0 };
+    const allContacts = await database.select().from(contacts).where(eq(contacts.userId, ctx.user.id));
+    const cold = allContacts.filter(c => c.relationshipTier === "cold").length;
+    const warm = allContacts.filter(c => c.relationshipTier === "warm").length;
+    const hot = allContacts.filter(c => c.relationshipTier === "hot").length;
+    const inSequence = allContacts.filter(c => c.loopType === "relationship_sequence").length;
+    const inTouchpoints = allContacts.filter(c => c.loopType === "flexible_touchpoints").length;
+    const enrollments = await database.select().from(contactSequenceEnrollments).where(eq(contactSequenceEnrollments.userId, ctx.user.id));
+    const sequenceCompletions = enrollments.filter(e => e.status === "completed").length;
+    return { cold, warm, hot, inSequence, inTouchpoints, sequenceReplies: 0, sequenceCompletions };
+  }),
 });
+import { getDb } from "../db";
+import { contacts, contactSequenceEnrollments } from "../../drizzle/schema";
+import { eq, and, sql } from "drizzle-orm";

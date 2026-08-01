@@ -29,6 +29,7 @@ export default function Dashboard() {
   const { data: topEngaged } = trpc.analytics.topEngaged.useQuery();
   const { data: sigStats } = trpc.signatures.stats.useQuery();
   const { data: voiceProfile } = trpc.voice.get.useQuery();
+  const { data: pipeline } = trpc.analytics.pipeline.useQuery();
 
   return (
     <div className="page-enter max-w-5xl">
@@ -172,6 +173,49 @@ export default function Dashboard() {
       )}
 
       {/* Signature A/B Testing */}
+      {/* Relationship Pipeline */}
+      {pipeline && (pipeline.cold > 0 || pipeline.warm > 0 || pipeline.hot > 0) && (
+        <div className="bg-card border border-border rounded-xl p-5 mb-6">
+          <h3 className="font-semibold flex items-center gap-2 mb-4"><Users className="w-4 h-4 text-primary" /> Relationship Pipeline</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="flex-1 text-center">
+              <div className="w-full bg-blue-100 rounded-lg py-3">
+                <p className="text-2xl font-serif text-blue-700">{pipeline.cold}</p>
+                <p className="text-xs text-blue-600 mt-0.5">Cold</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 text-center">
+              <div className="w-full bg-amber-100 rounded-lg py-3">
+                <p className="text-2xl font-serif text-amber-700">{pipeline.warm}</p>
+                <p className="text-xs text-amber-600 mt-0.5">Warm</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 text-center">
+              <div className="w-full bg-red-100 rounded-lg py-3">
+                <p className="text-2xl font-serif text-red-700">{pipeline.hot}</p>
+                <p className="text-xs text-red-600 mt-0.5">Hot</p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center text-xs text-muted-foreground">
+            <div className="bg-muted/30 rounded-lg p-2">
+              <p className="font-medium text-foreground text-sm">{pipeline.inSequence}</p>
+              <p>In Sequences</p>
+            </div>
+            <div className="bg-muted/30 rounded-lg p-2">
+              <p className="font-medium text-foreground text-sm">{pipeline.inTouchpoints}</p>
+              <p>In Touchpoints</p>
+            </div>
+            <div className="bg-muted/30 rounded-lg p-2">
+              <p className="font-medium text-foreground text-sm">{pipeline.sequenceCompletions}</p>
+              <p>Completions</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {sigStats && sigStats.length > 1 && (
         <div className="bg-card border border-border rounded-xl p-5 mb-6">
           <h3 className="font-semibold flex items-center gap-2 mb-4"><Star className="w-4 h-4 text-primary" /> Signature A/B Performance</h3>
