@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles, Clock, MoreVertical } from "lucide-react";
+import { ArrowLeft, Pencil, Linkedin, Instagram, Facebook, Mail, Phone, Building2, Calendar, Zap, Tag, PauseCircle, PlayCircle, Sparkles, Clock, MoreVertical, Flame, Thermometer, Snowflake, XOctagon, Archive, Trash2, GitBranch } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"; 
 import { Send, CalendarClock } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,16 @@ export default function ContactDetail() {
   const setStatusMutation = trpc.contacts.setLoopStatus.useMutation({
     onSuccess: () => { toast.success("Status updated"); refetch(); },
     onError: (e) => toast.error(e.message),
+  });
+
+  const updateTierMutation = trpc.contacts.update.useMutation({
+    onSuccess: () => { toast.success("Tier updated"); refetch(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const deleteMutation = trpc.contacts.delete.useMutation({
+    onSuccess: () => { toast.success("Contact deleted"); setLocation("/contacts"); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const generateMutation = trpc.drafts.generate.useMutation({
@@ -150,6 +160,37 @@ export default function ContactDetail() {
                   </DropdownMenuItem>
                 </>
               )}
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground font-medium mt-1">Change Tier</DropdownMenuItem>
+              {contact.relationshipTier !== "cold" && (
+                <DropdownMenuItem onClick={() => updateTierMutation.mutate({ id: contact.id, relationshipTier: "cold" })}>
+                  <Snowflake className="w-4 h-4 mr-2 text-blue-500" /> Mark Cold
+                </DropdownMenuItem>
+              )}
+              {contact.relationshipTier !== "warm" && (
+                <DropdownMenuItem onClick={() => updateTierMutation.mutate({ id: contact.id, relationshipTier: "warm" })}>
+                  <Thermometer className="w-4 h-4 mr-2 text-amber-500" /> Mark Warm
+                </DropdownMenuItem>
+              )}
+              {contact.relationshipTier !== "hot" && (
+                <DropdownMenuItem onClick={() => updateTierMutation.mutate({ id: contact.id, relationshipTier: "hot" })}>
+                  <Flame className="w-4 h-4 mr-2 text-red-500" /> Mark Hot
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem disabled className="text-xs text-muted-foreground font-medium mt-1">Automation</DropdownMenuItem>
+              {contact.loopStatus !== "active" && (
+                <DropdownMenuItem onClick={() => setStatusMutation.mutate({ id: contactId, status: "active" })}>
+                  <PlayCircle className="w-4 h-4 mr-2 text-green-600" /> Resume
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => updateTierMutation.mutate({ id: contact.id, loopType: "none", loopStatus: "paused" })}>
+                <XOctagon className="w-4 h-4 mr-2 text-orange-500" /> End Automation
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setStatusMutation.mutate({ id: contactId, status: "archived" })}>
+                <Archive className="w-4 h-4 mr-2" /> Archive
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onClick={() => { if (confirm(`Delete ${contact.firstName}? This cannot be undone.`)) deleteMutation.mutate({ id: contact.id }); }}>
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -439,4 +480,3 @@ export default function ContactDetail() {
     </div>
   );
 }
-import { GitBranch } from "lucide-react";

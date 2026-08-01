@@ -72,6 +72,10 @@ export const analyticsRouter = router({
     const sequenceCompletions = enrollments.filter(e => e.status === "completed").length;
     return { cold, warm, hot, inSequence, inTouchpoints, sequenceReplies: 0, sequenceCompletions };
   }),
+
+  extendedStats: protectedProcedure.query(async ({ ctx }) => {
+    return await db.getExtendedAnalyticsStats(ctx.user.id);
+  }),
 });
 import { getDb } from "../db";
 import { contacts, contactSequenceEnrollments } from "../../drizzle/schema";

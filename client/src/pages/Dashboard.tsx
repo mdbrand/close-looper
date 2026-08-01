@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { Send, Mail, TrendingUp, Clock, Users, PauseCircle, AlertTriangle, ArrowRight, Inbox, Mic, Plus, Star } from "lucide-react";
+import { Send, Mail, TrendingUp, Clock, Users, PauseCircle, AlertTriangle, ArrowRight, Inbox, Mic, Plus, Star, MessageSquare, Snowflake, Thermometer, Flame, GitBranch } from "lucide-react";
 
 function StatCard({ icon: Icon, label, value, sub, color, onClick }: { icon: any; label: string; value: string | number; sub?: string; color?: string; onClick?: () => void }) {
   return (
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const { data: sigStats } = trpc.signatures.stats.useQuery();
   const { data: voiceProfile } = trpc.voice.get.useQuery();
   const { data: pipeline } = trpc.analytics.pipeline.useQuery();
+  const { data: extStats } = trpc.analytics.extendedStats.useQuery();
 
   return (
     <div className="page-enter max-w-5xl">
@@ -69,6 +70,44 @@ export default function Dashboard() {
           <StatCard icon={PauseCircle} label="Paused Contacts" value={stats.pausedContacts} sub="need follow-up" onClick={() => setLocation("/contacts")} />
         </div>
       ) : null}
+
+      {/* Extended Stats Row */}
+      {extStats && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
+          <div className="bg-card border border-border rounded-xl p-4 text-center cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/contacts")}>
+            <p className="text-2xl font-serif">{extStats.totalContacts}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Total Contacts</p>
+          </div>
+          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/contacts")}>
+            <p className="text-2xl font-serif text-blue-700">{extStats.coldContacts}</p>
+            <p className="text-xs text-blue-600 mt-0.5 flex items-center justify-center gap-1"><Snowflake className="w-3 h-3" /> Cold</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/contacts")}>
+            <p className="text-2xl font-serif text-amber-700">{extStats.warmContacts}</p>
+            <p className="text-xs text-amber-600 mt-0.5 flex items-center justify-center gap-1"><Thermometer className="w-3 h-3" /> Warm</p>
+          </div>
+          <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/contacts")}>
+            <p className="text-2xl font-serif text-red-700">{extStats.hotContacts}</p>
+            <p className="text-xs text-red-600 mt-0.5 flex items-center justify-center gap-1"><Flame className="w-3 h-3" /> Hot</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 text-center cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/sequences")}>
+            <p className="text-2xl font-serif">{extStats.activeSequences}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 flex items-center justify-center gap-1"><GitBranch className="w-3 h-3" /> Active Sequences</p>
+          </div>
+        </div>
+      )}
+      {extStats && (extStats.repliesReceived > 0 || extStats.pausedAfterReply > 0) && (
+        <div className="grid grid-cols-2 gap-3 mb-8">
+          <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+            <MessageSquare className="w-5 h-5 text-green-600" />
+            <div><p className="text-xl font-serif">{extStats.repliesReceived}</p><p className="text-xs text-muted-foreground">Replies Received</p></div>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-all" onClick={() => setLocation("/contacts")}>
+            <PauseCircle className="w-5 h-5 text-amber-500" />
+            <div><p className="text-xl font-serif">{extStats.pausedAfterReply}</p><p className="text-xs text-muted-foreground">Contacts Paused</p></div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Needs Attention */}

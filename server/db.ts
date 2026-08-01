@@ -25,6 +25,7 @@ import {
   touchpoints,
   users,
 } from "../drizzle/schema";
+import { suppressionList } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -272,6 +273,40 @@ export async function getAnalyticsStats(userId: number) {
   };
 }
 
+export async function getExtendedAnalyticsStats(userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [totalContacts] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(eq(contacts.userId, userId));
+  const [coldContacts] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.relationshipTier, "cold")));
+  const [warmContacts] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.relationshipTier, "warm")));
+  const [hotContacts] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.relationshipTier, "hot")));
+  const [scheduledEmails] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "approved")));
+  const [sentThisMonth] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "sent"), gte(emailDrafts.sentAt, startOfMonth)));
+  const [repliesReceived] = await db.select({ count: sql<number>`count(*)` }).from(emailEvents).where(eq(emailEvents.eventType, "replied"));
+  const [pausedAfterReply] = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.userId, userId), eq(contacts.loopStatus, "paused")));
+  const [pendingApproval] = await db.select({ count: sql<number>`count(*)` }).from(emailDrafts).where(and(eq(emailDrafts.userId, userId), eq(emailDrafts.status, "pending")));
+
+  // Count active sequences
+  const { contactSequenceEnrollments } = await import("../drizzle/schema");
+  const [activeSequences] = await db.select({ count: sql<number>`count(*)` }).from(contactSequenceEnrollments).where(and(eq(contactSequenceEnrollments.userId, userId), eq(contactSequenceEnrollments.status, "active")));
+
+  return {
+    totalContacts: Number(totalContacts?.count ?? 0),
+    coldContacts: Number(coldContacts?.count ?? 0),
+    warmContacts: Number(warmContacts?.count ?? 0),
+    hotContacts: Number(hotContacts?.count ?? 0),
+    activeSequences: Number(activeSequences?.count ?? 0),
+    pendingApproval: Number(pendingApproval?.count ?? 0),
+    scheduledEmails: Number(scheduledEmails?.count ?? 0),
+    sentThisMonth: Number(sentThisMonth?.count ?? 0),
+    repliesReceived: Number(repliesReceived?.count ?? 0),
+    pausedAfterReply: Number(pausedAfterReply?.count ?? 0),
+  };
+}
+
 export async function getCalendarEvents(userId: number, startDate: Date, endDate: Date) {
   const db = await getDb();
   if (!db) return [];
@@ -340,4 +375,22 @@ export async function applyFeedbackRules(text: string, userId: number): Promise<
     }
   }
   return { text: result, appliedRules: appliedRuleIds };
+}
+
+// ─── Suppression List ────────────────────────────────────────────────────────
+export async function isEmailSuppressed(email: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+  const result = await db.select().from(suppressionList).where(eq(suppressionList.email, email.toLowerCase())).limit(1);
+  return result.length > 0;
+}
+
+export async function addToSuppressionList(userId: number, email: string, reason: "unsubscribed" | "bounced" | "blocked"): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(suppressionList).values({ userId, email: email.toLowerCase(), reason });
+  } catch (e) {
+    // Ignore duplicate entries
+  }
 }

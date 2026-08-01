@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Pencil, Send, Inbox, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { CheckCircle2, XCircle, Pencil, Send, Inbox, ChevronDown, ChevronUp, Info, RefreshCw, PauseCircle } from "lucide-react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   federal_holiday: "Federal Holiday",
@@ -41,6 +41,14 @@ export default function Queue() {
   const sendMutation = trpc.drafts.send.useMutation({
     onSuccess: () => { toast.success("Email sent!"); refetch(); },
     onError: (e) => toast.error(e.message),
+  });
+  const regenerateMutation = trpc.drafts.generate.useMutation({
+    onSuccess: () => { toast.success("New draft generated!"); refetch(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const pauseContactMutation = trpc.contacts.setLoopStatus.useMutation({
+    onSuccess: () => { toast.success("Contact paused"); refetch(); },
+    onError: (e: any) => toast.error(e.message),
   });
 
   const defaultGmailId = gmailAccounts?.find(a => a.isDefault)?.id ?? gmailAccounts?.[0]?.id;
@@ -184,6 +192,12 @@ export default function Queue() {
                   <div className="flex gap-2 ml-auto">
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-muted-foreground" onClick={() => startEdit(draft)}>
                       <Pencil className="w-3.5 h-3.5" /> Edit
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-muted-foreground" onClick={() => regenerateMutation.mutate({ contactId: draft.contactId, touchpointName: draft.touchpointName ?? undefined, touchpointCategory: draft.touchpointCategory ?? undefined })} disabled={regenerateMutation.isPending}>
+                      <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-muted-foreground" onClick={() => pauseContactMutation.mutate({ id: draft.contactId, status: "paused" })} disabled={pauseContactMutation.isPending}>
+                      <PauseCircle className="w-3.5 h-3.5" /> Pause Contact
                     </Button>
                     <Button size="sm" variant="ghost" className="h-8 gap-1.5 text-muted-foreground" onClick={() => skipMutation.mutate({ id: draft.id })} disabled={skipMutation.isPending}>
                       <XCircle className="w-3.5 h-3.5" /> Skip

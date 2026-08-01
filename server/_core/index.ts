@@ -53,7 +53,16 @@ async function startServer() {
     const { trackingId } = req.params;
     try {
       const draft = await getEmailDraftByTrackingId(trackingId);
-      if (draft) await createEmailEvent({ draftId: draft.id, eventType: "unsubscribed" });
+      if (draft) {
+        await createEmailEvent({ draftId: draft.id, eventType: "unsubscribed" });
+        // Add to suppression list and pause contact
+        const { addToSuppressionList, getContact, updateContact } = await import("../db");
+        const contact = await getContact(draft.contactId, draft.userId);
+        if (contact?.email) {
+          await addToSuppressionList(draft.userId, contact.email, "unsubscribed");
+          await updateContact(draft.contactId, draft.userId, { loopStatus: "paused" });
+        }
+      }
     } catch (_) { /* silent */ }
     res.send("<html><body style='font-family:sans-serif;text-align:center;padding:60px'><h2>You've been unsubscribed.</h2><p>You won't receive any more emails from this sender.</p></body></html>");
   });

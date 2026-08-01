@@ -149,6 +149,56 @@ export const importExportRouter = router({
       await database.delete(importBatches).where(eq(importBatches.id, input.batchId));
       return { deleted: contactIds.length };
     }),
+
+  getTemplate: protectedProcedure.query(() => {
+    const headers = [
+      "First Name", "Last Name", "Email", "Phone", "Company", "Industry",
+      "Relationship Tier", "Contact Source", "Source Name", "Source Location",
+      "Source URL", "Date Found", "Personal Notes", "Tags"
+    ];
+    const exampleRow = [
+      "Jane", "Smith", "jane@example.com", "555-1234", "Smith Roofing", "Construction",
+      "cold", "business_card", "Chamber of Commerce Mixer", "Downtown Coffee Shop",
+      "https://smithroofing.com", "2026-07-15", "Met at chamber event. Big Yankees fan.", "referral-partner"
+    ];
+    const csv = [headers, exampleRow].map(row =>
+      row.map(cell => {
+        const str = String(cell || "");
+        return str.includes(",") || str.includes('"') || str.includes("\n")
+          ? `"${str.replace(/"/g, '""')}"` : str;
+      }).join(",")
+    ).join("\n");
+    return { csv, filename: "close-looper-import-template.csv" };
+  }),
+
+  bulkEnrollInSequence: protectedProcedure
+    .input(z.object({ contactIds: z.array(z.number()), sequenceId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const { contactSequenceEnrollments, contacts } = await import("../../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      let enrolled = 0;
+      const now = new Date();
+      for (const contactId of input.contactIds) {
+        try {
+          const day = now.getDate();
+          let sendDate = new Date(now.getFullYear(), now.getMonth(), 15, 10, 0, 0);
+          if (day > 10) sendDate = new Date(now.getFullYear(), now.getMonth() + 1, 15, 10, 0, 0);
+          const dow = sendDate.getDay();
+          if (dow === 6) sendDate.setDate(sendDate.getDate() + 3);
+          else if (dow === 0) sendDate.setDate(sendDate.getDate() + 2);
+          await database.insert(contactSequenceEnrollments).values({
+            userId: ctx.user.id, contactId, sequenceId: input.sequenceId,
+            currentStepNumber: 1, status: "active", nextSendAt: sendDate,
+          });
+          await database.update(contacts).set({ relationshipTier: "cold", loopType: "relationship_sequence" })
+            .where(and(eq(contacts.id, contactId), eq(contacts.userId, ctx.user.id)));
+          enrolled++;
+        } catch (e) { /* skip already enrolled */ }
+      }
+      return { enrolled };
+    }),
 });
 
 function parseCSVLine(line: string): string[] {

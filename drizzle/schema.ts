@@ -293,3 +293,15 @@ export const senderProfiles = mysqlTable("sender_profiles", {
 
 export type SenderProfile = typeof senderProfiles.$inferSelect;
 export type InsertSenderProfile = typeof senderProfiles.$inferInsert;
+
+// ─── Suppression List ──────────────────────────────────────────────────────
+export const suppressionList = mysqlTable("suppression_list", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  reason: mysqlEnum("reason", ["unsubscribed", "bounced", "blocked"]).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SuppressionEntry = typeof suppressionList.$inferSelect;
+export type InsertSuppressionEntry = typeof suppressionList.$inferInsert;

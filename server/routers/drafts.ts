@@ -168,6 +168,12 @@ export const draftsRouter = router({
     
     const contact = await db.getContact(draft.contactId, ctx.user.id);
     if (!contact) throw new TRPCError({ code: "NOT_FOUND" });
+
+    // Check suppression list before sending
+    if (contact.email) {
+      const suppressed = await db.isEmailSuppressed(contact.email);
+      if (suppressed) throw new TRPCError({ code: "BAD_REQUEST", message: `${contact.email} has unsubscribed or bounced. Cannot send to suppressed contacts.` });
+    }
     
     try {
       const { google } = await import("googleapis");
@@ -217,8 +223,18 @@ export const draftsRouter = router({
           signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
         }
       }
+
+      // Get mailing address from sender profile for CAN-SPAM compliance
+      const { senderProfiles } = await import("../../drizzle/schema");
+      let mailingAddress = "";
+      if (database) {
+        const profiles = await database.select().from(senderProfiles).where(eqOp(senderProfiles.userId, ctx.user.id)).limit(1);
+        if (profiles[0]?.mailingAddress) {
+          mailingAddress = `<p style="font-size:11px;color:#999;margin-top:4px;">${profiles[0].mailingAddress}</p>`;
+        }
+      }
       
-      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p>${signatureHtml}<br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;"><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
+      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p>${signatureHtml}<br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;">${mailingAddress}<p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
       
       const emailLines = [
         `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
