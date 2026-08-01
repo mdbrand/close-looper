@@ -206,7 +206,19 @@ export const draftsRouter = router({
       const trackingPixelUrl = `${appUrl}/api/track/${draft.trackingId}.gif`;
       const unsubscribeUrl = `${appUrl}/api/unsubscribe/${draft.trackingId}`;
       
-      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p><br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;"><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
+      // Get default signature
+      const { emailSignatures } = await import("../../drizzle/schema");
+      const { eq: eqOp, and: andOp } = await import("drizzle-orm");
+      const database = await db.getDb();
+      let signatureHtml = "";
+      if (database) {
+        const sigs = await database.select().from(emailSignatures).where(andOp(eqOp(emailSignatures.userId, ctx.user.id), eqOp(emailSignatures.isDefault, true))).limit(1);
+        if (sigs[0]) {
+          signatureHtml = `<br><br><p style="color:#555;white-space:pre-wrap;">${sigs[0].content.replace(/\n/g, "<br>")}</p>`;
+        }
+      }
+      
+      const htmlBody = `<html><body><p>${draft.body.replace(/\n/g, "<br>")}</p>${signatureHtml}<br><hr style="border:none;border-top:1px solid #eee;margin:20px 0;"><p style="font-size:11px;color:#999;"><a href="${unsubscribeUrl}" style="color:#999;">Unsubscribe</a></p><img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body></html>`;
       
       const emailLines = [
         `From: ${gmailAccount.senderName ? `${gmailAccount.senderName} <${gmailAccount.gmailAddress}>` : gmailAccount.gmailAddress}`,
