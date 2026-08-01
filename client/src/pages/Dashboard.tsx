@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { Send, Mail, TrendingUp, Clock, Users, PauseCircle, AlertTriangle, ArrowRight, Inbox, Mic, Plus, Star } from "lucide-react";
 
-function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: string | number; sub?: string; color?: string }) {
+function StatCard({ icon: Icon, label, value, sub, color, onClick }: { icon: any; label: string; value: string | number; sub?: string; color?: string; onClick?: () => void }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-5">
+    <div className={`bg-card border border-border rounded-xl p-5 ${onClick ? "cursor-pointer hover:shadow-md hover:border-primary/30 transition-all" : ""}`} onClick={onClick}>
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>
@@ -59,12 +59,12 @@ export default function Dashboard() {
         </div>
       ) : stats ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-          <StatCard icon={Send} label="Sent This Month" value={stats.sentThisMonth} />
-          <StatCard icon={Mail} label="Sent All Time" value={stats.sentAllTime} />
-          <StatCard icon={TrendingUp} label="Open Rate" value={`${stats.openRate}%`} sub="of all sent emails" />
-          <StatCard icon={Clock} label="In Queue" value={stats.pendingCount} sub="drafts awaiting review" />
-          <StatCard icon={Users} label="Active Contacts" value={stats.activeContacts} sub="in a loop" />
-          <StatCard icon={PauseCircle} label="Paused Contacts" value={stats.pausedContacts} sub="need follow-up" />
+          <StatCard icon={Send} label="Sent This Month" value={stats.sentThisMonth} onClick={() => setLocation("/calendar")} />
+          <StatCard icon={Mail} label="Sent All Time" value={stats.sentAllTime} onClick={() => setLocation("/calendar")} />
+          <StatCard icon={TrendingUp} label="Open Rate" value={`${stats.openRate}%`} sub="of all sent emails" onClick={() => setLocation("/calendar")} />
+          <StatCard icon={Clock} label="In Queue" value={stats.pendingCount} sub="drafts awaiting review" onClick={() => setLocation("/queue")} />
+          <StatCard icon={Users} label="Active Contacts" value={stats.activeContacts} sub="in a loop" onClick={() => setLocation("/contacts")} />
+          <StatCard icon={PauseCircle} label="Paused Contacts" value={stats.pausedContacts} sub="need follow-up" onClick={() => setLocation("/contacts")} />
         </div>
       ) : null}
 

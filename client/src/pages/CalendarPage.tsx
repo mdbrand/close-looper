@@ -24,6 +24,13 @@ export default function CalendarPage() {
   const [view, setView] = useState<"calendar" | "list">("calendar");
   const manualSendMutation = trpc.drafts.manualSend.useMutation();
   const [currentDate, setCurrentDate] = useState(() => new Date());
+  const scheduleMutation = trpc.drafts.scheduleSend.useMutation({
+    onSuccess: () => { toast.success("Email scheduled!"); setSelectedDraft(null); setShowScheduleDialog(false); },
+    onError: (e: any) => toast.error(e?.message || "Failed to schedule"),
+  });
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleTime, setScheduleTime] = useState("09:00");
 
   const startDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth(), 1), [currentDate]);
   const endDate = useMemo(() => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0, 23, 59, 59), [currentDate]);
@@ -97,9 +104,9 @@ export default function CalendarPage() {
                       <>
                         <div className={`w-7 h-7 flex items-center justify-center rounded-full text-sm mb-1 ${isToday ? "bg-primary text-primary-foreground font-semibold" : "text-foreground"}`}>{day}</div>
                         <div className="space-y-0.5">
-                          {events.slice(0, 3).map(event => (
-                            <div key={event.id} className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)}>
-                              {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.
+              {events.slice(0, 3).map(event => (
+                            <div key={event.id} className={`text-xs px-1.5 py-0.5 rounded truncate cursor-pointer ${STATUS_COLORS[event.status] ?? "bg-gray-100"}`} onClick={() => setSelectedDraft(event)} title={`${event.subject}${event.scheduledSendAt ? ` — Scheduled: ${new Date(event.scheduledSendAt).toLocaleString()}` : ""}`}>
+                              {event.contact?.firstName} {event.contact?.lastName?.charAt(0) ?? ""}.{event.scheduledSendAt ? " ⏰" : ""}
                             </div>
                           ))}
                           {events.length > 3 && <div className="text-xs text-muted-foreground px-1">+{events.length - 3} more</div>}
@@ -184,13 +191,33 @@ export default function CalendarPage() {
               {selectedDraft.sentAt && <p className="text-xs text-muted-foreground">Sent: {new Date(selectedDraft.sentAt).toLocaleString()}</p>}
               {selectedDraft.openCount > 0 && <p className="text-xs text-green-600">Opened {selectedDraft.openCount} time{selectedDraft.openCount !== 1 ? "s" : ""}</p>}
               {selectedDraft.status !== "sent" && (
-                <Button
-                  onClick={() => setConfirmSendDraft(selectedDraft)}
-                  className="mt-4 w-full"
-                  disabled={manualSendMutation.isPending}
-                >
-                  Send Now
-                </Button>
+                <div className="flex gap-2 mt-4">
+                  <Button
+                    onClick={() => setConfirmSendDraft(selectedDraft)}
+                    className="flex-1"
+                    disabled={manualSendMutation.isPending}
+                  >
+                    Send Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => { setScheduleDate(""); setShowScheduleDialog(true); }}
+                    className="flex-1"
+                  >
+                    Schedule
+                  </Button>
+                </div>
+              )}
+              {selectedDraft.scheduledSendAt && selectedDraft.status !== "sent" && (
+                <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3 mt-2">
+                  <p className="text-xs text-blue-700">Scheduled: {new Date(selectedDraft.scheduledSendAt).toLocaleString()}</p>
+                  <button
+                    className="text-xs text-red-600 hover:text-red-700 font-medium"
+                    onClick={() => { scheduleMutation.mutate({ id: selectedDraft.id, scheduledSendAt: null as any }); }}
+                  >
+                    Cancel
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -230,6 +257,40 @@ export default function CalendarPage() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Schedule Send Dialog */}
+      <Dialog open={showScheduleDialog} onOpenChange={setShowScheduleDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl">Schedule Send</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Pick a date and time to send "{selectedDraft?.subject}".</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Date</label>
+                <input type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} min={new Date().toISOString().split("T")[0]} className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Time</label>
+                <input type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} className="w-full px-3 py-2 text-sm border border-border rounded-lg bg-background" />
+              </div>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!scheduleDate || scheduleMutation.isPending}
+              onClick={() => {
+                if (selectedDraft && scheduleDate) {
+                  const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
+                  scheduleMutation.mutate({ id: selectedDraft.id, scheduledSendAt: scheduledAt });
+                }
+              }}
+            >
+              {scheduleMutation.isPending ? "Scheduling..." : "Schedule Email"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
