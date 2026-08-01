@@ -1,9 +1,21 @@
 import { Link } from "wouter";
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Mail, Calendar, Users, Zap, Star, ArrowRight, Share2, Gift } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function LandingPage() {
+  const { isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate("/dashboard");
+    }
+  }, [isAuthenticated, loading]);
+
   return (
     <div className="min-h-screen bg-[#FAFAF7] text-foreground font-sans">
       {/* Nav */}
