@@ -13,6 +13,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   quirky_holiday: "Quirky Holiday",
   industry_specific: "Industry",
   personal_milestone: "Personal",
+  relationship_sequence: "Sequence",
 };
 
 export default function Queue() {
@@ -100,11 +101,16 @@ export default function Queue() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium">{contact?.firstName} {contact?.lastName}</span>
-                      {draft.touchpointCategory && (
+                    {draft.touchpointCategory && (
                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium badge-${draft.touchpointCategory.replace("_", "-").replace("_", "-")}`}>
                           {CATEGORY_LABELS[draft.touchpointCategory] ?? draft.touchpointCategory}
                         </span>
                       )}
+                    {draft.generationSource === "relationship_sequence" && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-700">
+                        Sequence
+                      </span>
+                    )}
                     </div>
                     <p className="text-sm font-medium mt-0.5 text-foreground">{draft.subject}</p>
                     {/* Why explanation */}

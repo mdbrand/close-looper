@@ -44,6 +44,7 @@ export default function CalendarPage() {
 
   const { data: calendarEvents, isLoading } = trpc.analytics.calendarEvents.useQuery({ startDate, endDate });
   const { data: allDrafts, isLoading: listLoading } = trpc.analytics.listView.useQuery();
+  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();
 
   const prevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
   const nextMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
@@ -352,4 +353,3 @@ export default function CalendarPage() {
     </div>
   );
 }
-  const { data: defaultSignature } = trpc.signatures.getDefault.useQuery();

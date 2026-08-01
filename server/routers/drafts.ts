@@ -244,6 +244,34 @@ export const draftsRouter = router({
         title: "Email Sent",
         content: `Your email to ${contact.firstName} ${contact.lastName} has been sent successfully.`,
       });
+      // If this is a sequence email, advance the step
+      if (draft.sequenceEnrollmentId) {
+        try {
+          const { contactSequenceEnrollments } = await import("../../drizzle/schema");
+          const database = await db.getDb();
+          if (database) {
+            const { eq: eqOp2 } = await import("drizzle-orm");
+            const [enrollment] = await database.select().from(contactSequenceEnrollments).where(eqOp2(contactSequenceEnrollments.id, draft.sequenceEnrollmentId)).limit(1);
+            if (enrollment) {
+              const nextStep = enrollment.currentStepNumber + 1;
+              const nextDate = new Date();
+              nextDate.setMonth(nextDate.getMonth() + 1);
+              nextDate.setDate(15);
+              nextDate.setHours(10, 0, 0, 0);
+              const dow = nextDate.getDay();
+              if (dow === 0) nextDate.setDate(nextDate.getDate() + 2);
+              if (dow === 6) nextDate.setDate(nextDate.getDate() + 3);
+              if (nextStep > 12) {
+                await database.update(contactSequenceEnrollments).set({ status: "completed", completedAt: new Date(), currentStepNumber: 12 }).where(eqOp2(contactSequenceEnrollments.id, enrollment.id));
+              } else {
+                await database.update(contactSequenceEnrollments).set({ currentStepNumber: nextStep, nextSendAt: nextDate }).where(eqOp2(contactSequenceEnrollments.id, enrollment.id));
+              }
+            }
+          }
+        } catch (seqErr) {
+          console.error("[manualSend] Sequence advancement error:", seqErr);
+        }
+      }
       return { success: true, messageId: sent.data.id, deliveryStatus: "delivered" };
     } catch (err: any) {
       console.error("[manualSend] FULL ERROR:", err);

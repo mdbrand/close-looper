@@ -12,6 +12,7 @@ import { recordEmailOpen, getEmailDraftByTrackingId, upsertGmailAccount, createE
 import { generateDraftsHandler } from "../scheduled/generateDrafts";
 import { checkRepliesHandler } from "../scheduled/checkReplies";
 import { sendWeeklyDigestRouter } from "../scheduled/sendWeeklyDigest";
+import { generateSequenceDraftsRouter } from "../scheduled/generateSequenceDrafts";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -95,6 +96,7 @@ async function startServer() {
   app.post("/api/scheduled/generateDrafts", generateDraftsHandler);
   app.post("/api/scheduled/checkReplies", checkRepliesHandler);
   app.use(sendWeeklyDigestRouter);
+  app.use(generateSequenceDraftsRouter);
 
   // ─── tRPC API ─────────────────────────────────────────────────────────────
   app.use("/api/trpc", createExpressMiddleware({ router: appRouter, createContext }));
