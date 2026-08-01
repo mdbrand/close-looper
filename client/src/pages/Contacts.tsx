@@ -39,6 +39,61 @@ export default function Contacts() {
   const [importPreview, setImportPreview] = useState<any>(null);
 
   const { data: contacts, isLoading, refetch } = trpc.contacts.list.useQuery();
+  const { data: importHistory, refetch: refetchHistory } = trpc.importExport.getImportHistory.useQuery();
+  const importMutation = trpc.importExport.importContacts.useMutation({
+    onSuccess: (data: any) => { toast.success(`Imported ${data.imported} contacts${data.skipped ? `, ${data.skipped} duplicates skipped` : ""}`); setShowImportModal(false); setCsvContent(""); setImportPreview(null); refetch(); refetchHistory(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const parseMutation = trpc.importExport.parseImportCSV.useMutation();
+  const undoImportMutation = trpc.importExport.undoImport.useMutation({
+    onSuccess: (data) => { toast.success(`Removed ${data.deleted} contacts`); refetch(); refetchHistory(); },
+    onError: (e) => toast.error(e.message),
+  });
+  const utils = trpc.useUtils();
+
+  const handleExport = async () => {
+    try {
+      const data = await utils.importExport.exportContacts.fetch();
+      const blob = new Blob([data.csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = data.filename; a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Contacts exported");
+    } catch (e: any) {
+      toast.error(e.message || "Export failed");
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      setCsvContent(text);
+      parseMutation.mutate({ csvContent: text }, {
+        onSuccess: (parsed) => {
+          setImportPreview({
+            headers: parsed.columnMapping.map((m: any) => m.mapped),
+            columnMapping: parsed.columnMapping,
+            rows: parsed.preview,
+            allRows: parsed.allRows,
+            totalRows: parsed.count,
+            filename: file.name,
+          });
+        },
+        onError: () => toast.error("Failed to parse CSV"),
+      });
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = () => {
+    if (!importPreview?.allRows) return;
+    importMutation.mutate({ rows: importPreview.allRows, skipDuplicates: true, filename: importPreview.filename || "import.csv" });
+  };
+
   const deleteMutation = trpc.contacts.delete.useMutation({
     onSuccess: () => { toast.success("Contact deleted"); refetch(); },
     onError: (e) => toast.error(e.message),
@@ -67,6 +122,12 @@ export default function Contacts() {
         </div>
         <Button onClick={() => setShowAddDialog(true)} className="gap-2">
           <Plus className="w-4 h-4" /> Add Contact
+        </Button>
+        <Button onClick={() => setShowImportModal(true)} variant="outline" className="gap-2">
+          <Upload className="w-4 h-4" /> Import CSV
+        </Button>
+        <Button onClick={handleExport} variant="outline" className="gap-2">
+          <Download className="w-4 h-4" /> Export
         </Button>
       </div>
 
@@ -193,6 +254,77 @@ export default function Contacts() {
           {editContact && <ContactForm contact={editContact} onSuccess={() => { setEditContact(null); refetch(); }} />}
         </DialogContent>
       </Dialog>
+      {/* Import CSV Modal */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-serif text-2xl">Import Contacts from CSV</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Upload a CSV file. We auto-detect columns like "firstname", "fname", "First Name", etc.</p>
+            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
+              <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground mb-2">Drop your CSV file here or click to browse</p>
+              <input type="file" accept=".csv" onChange={handleFileUpload} className="block mx-auto text-sm" />
+            </div>
+            {parseMutation.isPending && <p className="text-sm text-muted-foreground text-center">Analyzing columns...</p>}
+            {importPreview && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium">{importPreview.totalRows} contacts found in "{importPreview.filename}"</p>
+                {importPreview.columnMapping && (
+                  <div className="bg-muted/30 rounded-lg p-3">
+                    <p className="text-xs font-medium text-muted-foreground uppercase mb-2">Column Mapping (auto-detected)</p>
+                    <div className="grid grid-cols-2 gap-1 text-xs">
+                      {importPreview.columnMapping.map((m: any, i: number) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="text-muted-foreground truncate">{m.original}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-medium text-foreground">{m.mapped}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="overflow-x-auto border border-border rounded-lg">
+                  <table className="w-full text-xs">
+                    <thead><tr className="bg-muted/50">{importPreview.headers?.slice(0, 5).map((h: string) => <th key={h} className="px-2 py-1 text-left font-medium">{h}</th>)}</tr></thead>
+                    <tbody>{importPreview.rows.map((row: any, i: number) => <tr key={i} className="border-t border-border">{importPreview.headers?.slice(0, 5).map((h: string) => <td key={h} className="px-2 py-1 truncate max-w-[120px]">{row[h]}</td>)}</tr>)}</tbody>
+                  </table>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => { setShowImportModal(false); setCsvContent(""); setImportPreview(null); }}>Cancel</Button>
+                  <Button onClick={handleImport} disabled={importMutation.isPending}>
+                    {importMutation.isPending ? "Importing..." : `Import ${importPreview.totalRows} Contacts`}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Import History */}
+      {importHistory && importHistory.length > 0 && (
+        <div className="mt-8 bg-card border border-border rounded-xl p-5">
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide mb-3">Import History</h3>
+          <div className="space-y-2">
+            {importHistory.map((batch: any) => (
+              <div key={batch.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <div>
+                  <p className="text-sm font-medium">{batch.filename || "import.csv"}</p>
+                  <p className="text-xs text-muted-foreground">{batch.contactCount} contacts • {new Date(batch.createdAt).toLocaleDateString()}</p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  onClick={() => { if (confirm(`Undo this import? This will delete ${batch.contactCount} contacts.`)) undoImportMutation.mutate({ batchId: batch.id }); }}
+                  disabled={undoImportMutation.isPending}
+                >
+                  Undo Import
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -161,3 +161,16 @@ export const feedbackRules = mysqlTable("feedback_rules", {
 
 export type FeedbackRule = typeof feedbackRules.$inferSelect;
 export type InsertFeedbackRule = typeof feedbackRules.$inferInsert;
+
+// ─── Import Batches ─────────────────────────────────────────────────────────
+export const importBatches = mysqlTable("import_batches", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  filename: varchar("filename", { length: 500 }),
+  contactCount: int("contactCount").default(0).notNull(),
+  contactIds: text("contactIds"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ImportBatch = typeof importBatches.$inferSelect;
+export type InsertImportBatch = typeof importBatches.$inferInsert;

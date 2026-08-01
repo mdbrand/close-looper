@@ -50,26 +50,29 @@ export const importExportRouter = router({
       const lines = input.csvContent.trim().split("\n");
       if (lines.length < 2) throw new TRPCError({ code: "BAD_REQUEST", message: "CSV must have at least headers and one row" });
       
-      const headers = lines[0]!.split(",").map(h => h.trim().toLowerCase());
+      const rawHeaders = parseCSVLine(lines[0]!);
+      const mappedHeaders = rawHeaders.map(h => h.trim().toLowerCase());
+      const columnMapping = rawHeaders.map((raw, i) => ({ original: raw, mapped: mappedHeaders[i]! }));
       const rows = [];
       
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i]?.trim()) continue;
         const cells = parseCSVLine(lines[i]!);
         const row: Record<string, string> = {};
-        headers.forEach((h, idx) => {
+        mappedHeaders.forEach((h, idx) => {
           row[h] = (cells[idx] || "") as string;
         });
         rows.push(row);
       }
       
-      return { count: rows.length, preview: rows.slice(0, 5), allRows: rows };
+      return { count: rows.length, preview: rows.slice(0, 5), allRows: rows, columnMapping };
     }),
 
   importContacts: protectedProcedure
     .input(z.object({
       rows: z.array(z.record(z.string(), z.string())),
       skipDuplicates: z.boolean().default(true),
+      filename: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const results = { imported: 0, skipped: 0, errors: [] as string[] };
@@ -118,6 +121,33 @@ export const importExportRouter = router({
       }
       
       return results;
+    }),
+
+  getImportHistory: protectedProcedure.query(async ({ ctx }) => {
+    const database = await db.getDb();
+    if (!database) return [];
+    const { importBatches } = await import("../../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    return database.select().from(importBatches).where(eq(importBatches.userId, ctx.user.id)).orderBy(importBatches.createdAt);
+  }),
+
+  undoImport: protectedProcedure
+    .input(z.object({ batchId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const database = await db.getDb();
+      if (!database) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const { importBatches, contacts } = await import("../../drizzle/schema");
+      const { eq, and, inArray } = await import("drizzle-orm");
+      const batch = await database.select().from(importBatches)
+        .where(and(eq(importBatches.id, input.batchId), eq(importBatches.userId, ctx.user.id)))
+        .limit(1);
+      if (!batch[0]) throw new TRPCError({ code: "NOT_FOUND" });
+      const contactIds: number[] = JSON.parse(batch[0].contactIds || "[]");
+      if (contactIds.length > 0) {
+        await database.delete(contacts).where(and(eq(contacts.userId, ctx.user.id), inArray(contacts.id, contactIds)));
+      }
+      await database.delete(importBatches).where(eq(importBatches.id, input.batchId));
+      return { deleted: contactIds.length };
     }),
 });
 
