@@ -74,7 +74,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <Toaster position="top-right" />
+          <Toaster position="bottom-right" richColors />
           <AuthGate>
             <AppRoutes />
           </AuthGate>
