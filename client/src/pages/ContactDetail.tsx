@@ -14,6 +14,21 @@ import ContactForm from "@/components/ContactForm";
 
 const TOUCHPOINT_CATEGORIES = ["federal_holiday", "quirky_holiday", "industry_specific", "personal_milestone"];
 
+function EnrollButton({ contactId }: { contactId: number }) {
+  const { data: seqs } = trpc.sequences.list.useQuery();
+  const enrollMutation = trpc.sequences.enroll.useMutation({
+    onSuccess: (data) => { toast.success(`Enrolled! First email scheduled for ${new Date(data.nextSendAt).toLocaleDateString()}`); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const coldSeq = seqs?.find((s: any) => s.relationshipTier === "cold" && s.isDefault);
+  if (!coldSeq) return null;
+  return (
+    <Button size="sm" variant="outline" className="gap-1.5" onClick={() => enrollMutation.mutate({ contactId, sequenceId: coldSeq.id })} disabled={enrollMutation.isPending}>
+      <GitBranch className="w-3.5 h-3.5" /> {enrollMutation.isPending ? "Enrolling..." : "Enroll in Sequence"}
+    </Button>
+  );
+}
+
 export default function ContactDetail() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -220,6 +235,9 @@ export default function ContactDetail() {
                 <PauseCircle className="w-3.5 h-3.5" /> Pause Loop
               </Button>
             )}
+            {contact.relationshipTier === "cold" && contact.loopType !== "relationship_sequence" && (
+              <EnrollButton contactId={contact.id} />
+            )}
           </div>
           {contact.lastTouchSentAt && <p className="text-sm text-muted-foreground">Last touch: {new Date(contact.lastTouchSentAt).toLocaleDateString()}</p>}
           {contact.nextTouchScheduledAt && <p className="text-sm text-muted-foreground">Next scheduled: {new Date(contact.nextTouchScheduledAt).toLocaleDateString()}</p>}
@@ -421,3 +439,4 @@ export default function ContactDetail() {
     </div>
   );
 }
+import { GitBranch } from "lucide-react";

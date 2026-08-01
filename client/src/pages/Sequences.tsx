@@ -1,17 +1,38 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Plus, RotateCcw, ChevronRight, Users, CheckCircle2, Zap } from "lucide-react";
+import { ArrowLeft, Copy, RotateCcw, ChevronRight, Users, CheckCircle2, Zap, Pencil, X, Save } from "lucide-react";
 
 export default function Sequences() {
   const { data: seqs, isLoading, refetch } = trpc.sequences.list.useQuery();
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const { data: detail } = trpc.sequences.get.useQuery({ id: selectedId! }, { enabled: !!selectedId });
+  const { data: detail, refetch: refetchDetail } = trpc.sequences.get.useQuery({ id: selectedId! }, { enabled: !!selectedId });
+  const [editingStepId, setEditingStepId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
   const seedMutation = trpc.sequences.seed.useMutation({ onSuccess: () => { toast.success("Cold Sequence created!"); refetch(); }, onError: (e: any) => toast.error(e.message) });
   const duplicateMutation = trpc.sequences.duplicate.useMutation({ onSuccess: () => { toast.success("Sequence duplicated!"); refetch(); }, onError: (e: any) => toast.error(e.message) });
   const restoreMutation = trpc.sequences.restoreDefault.useMutation({ onSuccess: () => { toast.success("Default restored!"); refetch(); setSelectedId(null); }, onError: (e: any) => toast.error(e.message) });
-  const updateStepMutation = trpc.sequences.updateStep.useMutation({ onSuccess: () => toast.success("Step saved!"), onError: (e: any) => toast.error(e.message) });
+  const updateStepMutation = trpc.sequences.updateStep.useMutation({ onSuccess: () => { toast.success("Step saved!"); setEditingStepId(null); refetchDetail(); }, onError: (e: any) => toast.error(e.message) });
+
+  const startEditStep = (step: any) => {
+    setEditingStepId(step.id);
+    setEditForm({
+      internalName: step.internalName,
+      relationshipObjective: step.relationshipObjective,
+      desiredRecipientThought: step.desiredRecipientThought ?? "",
+      emailGuidance: step.emailGuidance,
+      suggestedClosing: step.suggestedClosing ?? "",
+      primaryCallToAction: step.primaryCallToAction ?? "",
+    });
+  };
+
+  const saveStep = () => {
+    if (!editingStepId) return;
+    updateStepMutation.mutate({ id: editingStepId, ...editForm });
+  };
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -43,27 +64,72 @@ export default function Sequences() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <span className="w-7 h-7 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{step.stepNumber}</span>
-                  <h3 className="font-medium">{step.internalName}</h3>
+                  {editingStepId === step.id ? (
+                    <Input value={editForm.internalName} onChange={e => setEditForm({ ...editForm, internalName: e.target.value })} className="h-8 text-sm font-medium" />
+                  ) : (
+                    <h3 className="font-medium">{step.internalName}</h3>
+                  )}
                 </div>
-                <span className="text-xs text-muted-foreground">Month {step.stepNumber}</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Relationship Objective</p>
-                  <p className="text-sm">{step.relationshipObjective}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Month {step.stepNumber}</span>
+                  {editingStepId === step.id ? (
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" onClick={() => setEditingStepId(null)} className="h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button>
+                      <Button size="sm" onClick={saveStep} disabled={updateStepMutation.isPending} className="h-7 gap-1 px-2"><Save className="w-3.5 h-3.5" /> Save</Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" variant="ghost" onClick={() => startEditStep(step)} className="h-7 w-7 p-0"><Pencil className="w-3.5 h-3.5" /></Button>
+                  )}
                 </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Desired Thought</p>
-                  <p className="text-sm italic">{step.desiredRecipientThought}</p>
+              </div>
+
+              {editingStepId === step.id ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Relationship Objective</label>
+                    <Textarea value={editForm.relationshipObjective} onChange={e => setEditForm({ ...editForm, relationshipObjective: e.target.value })} rows={2} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Desired Recipient Thought</label>
+                    <Input value={editForm.desiredRecipientThought} onChange={e => setEditForm({ ...editForm, desiredRecipientThought: e.target.value })} className="text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Email Guidance</label>
+                    <Textarea value={editForm.emailGuidance} onChange={e => setEditForm({ ...editForm, emailGuidance: e.target.value })} rows={4} className="text-sm" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Suggested Closing</label>
+                      <Input value={editForm.suggestedClosing} onChange={e => setEditForm({ ...editForm, suggestedClosing: e.target.value })} className="text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground uppercase tracking-wide mb-1 block">Primary CTA</label>
+                      <Input value={editForm.primaryCallToAction} onChange={e => setEditForm({ ...editForm, primaryCallToAction: e.target.value })} className="text-sm" />
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Email Guidance</p>
-                <p className="text-xs text-muted-foreground leading-relaxed">{step.emailGuidance}</p>
-              </div>
-              <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
-                <span>Closing: {step.suggestedClosing}</span>
-              </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Relationship Objective</p>
+                      <p className="text-sm">{step.relationshipObjective}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Desired Thought</p>
+                      <p className="text-sm italic">{step.desiredRecipientThought}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Email Guidance</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{step.emailGuidance}</p>
+                  </div>
+                  <div className="flex gap-4 mt-3 text-xs text-muted-foreground">
+                    <span>Closing: {step.suggestedClosing}</span>
+                    {step.primaryCallToAction && <span>CTA: {step.primaryCallToAction}</span>}
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
