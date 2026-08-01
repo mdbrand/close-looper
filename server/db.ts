@@ -26,7 +26,7 @@ import {
   touchpoints,
   users,
 } from "../drizzle/schema";
-import { suppressionList } from "../drizzle/schema";
+import { senderProfiles, suppressionList } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -431,6 +431,18 @@ export async function isEmailSuppressed(email: string, userId: number): Promise<
     .where(and(eq(suppressionList.userId, userId), eq(suppressionList.email, email.toLowerCase())))
     .limit(1);
   return result.length > 0;
+}
+
+/** Human-readable name for the sender, for the unsubscribe confirmation page. */
+export async function getSenderLabel(userId: number): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [profile] = await db
+    .select({ companyName: senderProfiles.companyName })
+    .from(senderProfiles)
+    .where(eq(senderProfiles.userId, userId))
+    .limit(1);
+  return profile?.companyName?.trim() || null;
 }
 
 export async function getSuppressionList(userId: number) {

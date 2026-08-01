@@ -10,6 +10,7 @@ import { createContext } from "./context";
 import { verifyGmailState } from "./crypto";
 import { sdk } from "./sdk";
 import { serveStatic, setupVite } from "./vite";
+import { unsubscribeConfirmPage, unsubscribeDonePage } from "../unsubscribePage";
 import { recordEmailOpen, getEmailDraftByTrackingId, upsertGmailAccount, createEmailEvent } from "../db";
 import { generateDraftsHandler } from "../scheduled/generateDrafts";
 import { checkRepliesHandler } from "../scheduled/checkReplies";
@@ -51,13 +52,35 @@ async function startServer() {
   });
 
   // ─── Unsubscribe ──────────────────────────────────────────────────────────
+  // GET only *offers* to unsubscribe — it must never change anything.
+  //
+  // Mail security gateways (Proofpoint, Mimecast, Microsoft Safe Links) fetch
+  // every URL in an inbound email before the recipient sees it. While this was
+  // a state-changing GET, those scanners silently unsubscribed and paused real
+  // contacts — invisible to both sides, and the exact outcome this product
+  // exists to prevent. Scanners do not submit forms, so the action lives on
+  // POST below.
   app.get("/api/unsubscribe/:trackingId", async (req, res) => {
+    const { trackingId } = req.params;
+    let senderLabel: string | null = null;
+    try {
+      const draft = await getEmailDraftByTrackingId(trackingId);
+      if (draft) {
+        const { getSenderLabel } = await import("../db");
+        senderLabel = await getSenderLabel(draft.userId);
+      }
+    } catch (_) { /* the page renders fine without a name */ }
+    // Never cached: the confirm page must not be served from a scanner's cache.
+    res.set("Cache-Control", "no-store");
+    res.send(unsubscribeConfirmPage(trackingId, senderLabel));
+  });
+
+  app.post("/api/unsubscribe/:trackingId", async (req, res) => {
     const { trackingId } = req.params;
     try {
       const draft = await getEmailDraftByTrackingId(trackingId);
       if (draft) {
         await createEmailEvent({ draftId: draft.id, eventType: "unsubscribed" });
-        // Add to suppression list and pause contact
         const { addToSuppressionList, getContact, updateContact } = await import("../db");
         const contact = await getContact(draft.contactId, draft.userId);
         if (contact?.email) {
@@ -65,8 +88,9 @@ async function startServer() {
           await updateContact(draft.contactId, draft.userId, { loopStatus: "paused" });
         }
       }
-    } catch (_) { /* silent */ }
-    res.send("<html><body style='font-family:sans-serif;text-align:center;padding:60px'><h2>You've been unsubscribed.</h2><p>You won't receive any more emails from this sender.</p></body></html>");
+    } catch (_) { /* silent: never tell the caller whether the id was real */ }
+    res.set("Cache-Control", "no-store");
+    res.send(unsubscribeDonePage());
   });
 
   // ─── Gmail OAuth Callback ─────────────────────────────────────────────────
