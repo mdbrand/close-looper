@@ -14,9 +14,12 @@ import { digestRouter } from "./routers/digest";
 import { snoozeRouter } from "./routers/snooze";
 import { signaturesRouter } from "./routers/signatures";
 import { senderProfileRouter } from "./routers/senderProfile";
+import { publicRouter, adminRouter } from "./routers/public";
 
 export const appRouter = router({
   system: systemRouter,
+  public: publicRouter,
+  admin: adminRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

@@ -307,3 +307,63 @@ export const suppressionList = mysqlTable("suppression_list", {
 
 export type SuppressionEntry = typeof suppressionList.$inferSelect;
 export type InsertSuppressionEntry = typeof suppressionList.$inferInsert;
+
+// ─── SaaS Public Layer ────────────────────────────────────────────────────────
+
+export const inviteCodes = mysqlTable("invite_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  createdByUserId: int("createdByUserId"),
+  usedByUserId: int("usedByUserId"),
+  usedAt: timestamp("usedAt"),
+  maxUses: int("maxUses").default(1).notNull(),
+  useCount: int("useCount").default(0).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const waitlistSignups = mysqlTable("waitlist_signups", {
+  id: int("id").autoincrement().primaryKey(),
+  firstName: varchar("firstName", { length: 100 }).notNull(),
+  lastName: varchar("lastName", { length: 100 }),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  phone: varchar("phone", { length: 30 }),
+  companyName: varchar("companyName", { length: 200 }),
+  website: varchar("website", { length: 300 }),
+  industry: varchar("industry", { length: 100 }),
+  successMetric: varchar("successMetric", { length: 200 }),
+  inviteCode: varchar("inviteCode", { length: 32 }),
+  referredByCode: varchar("referredByCode", { length: 32 }),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const referrals = mysqlTable("referrals", {
+  id: int("id").autoincrement().primaryKey(),
+  referrerUserId: int("referrerUserId").notNull(),
+  referralCode: varchar("referralCode", { length: 32 }).notNull().unique(),
+  referredEmail: varchar("referredEmail", { length: 320 }),
+  referredUserId: int("referredUserId"),
+  status: mysqlEnum("status", ["pending", "signed_up", "paid", "credited"]).default("pending").notNull(),
+  creditApplied: boolean("creditApplied").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  paidAt: timestamp("paidAt"),
+  creditedAt: timestamp("creditedAt"),
+});
+
+export const userProfiles = mysqlTable("user_profiles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  phone: varchar("phone", { length: 30 }),
+  companyName: varchar("companyName", { length: 200 }),
+  website: varchar("website", { length: 300 }),
+  industry: varchar("industry", { length: 100 }),
+  successMetric: varchar("successMetric", { length: 200 }),
+  referralCode: varchar("referralCode", { length: 32 }).unique(),
+  freeMonthsEarned: int("freeMonthsEarned").default(0).notNull(),
+  freeMonthsUsed: int("freeMonthsUsed").default(0).notNull(),
+  subscriptionStatus: mysqlEnum("subscriptionStatus", ["trial", "active", "cancelled", "past_due"]).default("trial").notNull(),
+  inviteCodeUsed: varchar("inviteCodeUsed", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});

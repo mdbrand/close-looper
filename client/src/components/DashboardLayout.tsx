@@ -21,20 +21,21 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Inbox, CalendarDays, Settings, Zap, UserCircle, GitBranch } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Inbox, CalendarDays, Settings, UserCircle, GitBranch, Share2, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Users, label: "Contacts", path: "/contacts" },
   { icon: Inbox, label: "Approval Queue", path: "/queue" },
   { icon: CalendarDays, label: "Calendar", path: "/calendar" },
   { icon: GitBranch, label: "Sequences", path: "/sequences" },
   { icon: UserCircle, label: "Sender Profile", path: "/sender-profile" },
   { icon: Settings, label: "Settings", path: "/settings" },
+  { icon: Share2, label: "Refer & Earn", path: "/referrals" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -117,6 +118,8 @@ function DashboardLayoutContent({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find(item => item.path === location);
   const isMobile = useIsMobile();
+  const adminMenuItem = user?.role === "admin" ? { icon: ShieldCheck, label: "Admin", path: "/admin" } : null;
+  const allMenuItems = adminMenuItem ? [...menuItems, adminMenuItem] : menuItems;
 
   useEffect(() => {
     if (isCollapsed) {
@@ -183,8 +186,8 @@ function DashboardLayoutContent({
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
-                const isActive = location === item.path;
+              {allMenuItems.map(item => {
+                const isActive = location === item.path || (item.path === "/dashboard" && location === "/");
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton

@@ -118,3 +118,15 @@
 - [x] Auto-resume when snooze period expires
 - [x] All 32 tests passing
 - [x] Zero TypeScript errors
+
+## Phase 14: SaaS Public Layer
+- [x] Database: invite_codes, waitlist_signups, referrals, user_profiles tables — applied via SQL
+- [x] Landing page: hero, features, how it works, pricing (Coming Soon), referral section, footer
+- [x] Sign-up page: invite code gate, name/email/phone/company/website/industry/success metric fields
+- [x] Sign-in page: Google OAuth + Forgot Password flow
+- [x] Referral link system: unique referral codes, share buttons (copy/X/email), credit tracking
+- [x] Admin panel: user list, invite code management, referral tracking, waitlist approve/reject, analytics
+- [x] Terms of Service page
+- [x] Privacy Policy page
+- [x] Wire public routes in App.tsx (/, /signup, /signin, /terms, /privacy) + auth routes (/dashboard, /contacts, /queue, /calendar, /sequences, /referrals, /admin)
+- [x] Add Refer & Earn + Admin (role-gated) to DashboardLayout sidebar
