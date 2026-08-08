@@ -9,10 +9,10 @@ This release closes the remaining multi-tenant sequence access bugs, adds real s
 3. Confirm these production variables are present:
    - `DATABASE_URL`
    - `JWT_SECRET`
-   - `APP_URL=https://closelooper.manus.space`
+   - `APP_URL=https://closelooper.com`
    - `GOOGLE_CLIENT_ID`
    - `GOOGLE_CLIENT_SECRET`
-   - `GOOGLE_REDIRECT_URI=https://closelooper.manus.space/api/gmail/callback`
+   - `GOOGLE_REDIRECT_URI=https://closelooper.com/api/gmail/callback`
    - `BUILT_IN_FORGE_API_URL`
    - `BUILT_IN_FORGE_API_KEY`
    - `OAUTH_SERVER_URL`
@@ -36,7 +36,7 @@ This release closes the remaining multi-tenant sequence access bugs, adds real s
    pnpm install --frozen-lockfile
    ```
 
-2. Apply the checked-in Drizzle migration `drizzle/0008_adorable_blockbuster.sql`:
+2. Apply the checked-in Drizzle migrations through `drizzle/0009_invite_only_and_contact_inquiries.sql`:
 
    ```bash
    pnpm db:push
@@ -52,7 +52,7 @@ This release closes the remaining multi-tenant sequence access bugs, adds real s
 
    Run database integration tests only against a disposable staging database, never production; those tests intentionally create test records.
 
-4. Deploy the application from the same commit that contains migration `0008`.
+4. Deploy the application from the same commit that contains migration `0009`.
 
 ## Required Manus Heartbeat jobs
 
@@ -82,6 +82,28 @@ Remove or disable legacy tasks pointing at `/api/cron/generate-sequence-drafts` 
 4. Use two application accounts and confirm one account cannot edit or enroll contacts, sequences, or sequence steps belonging to the other.
 5. Check application logs for `reconciliation`, `ScheduledSend`, token decryption, and migration errors.
 
-## Public launch gate
+## Invite-only beta checklist
 
-Before opening paid public registration, complete Google's production OAuth verification requirements for the Gmail scopes in use. The application requests `gmail.readonly`, which Google classifies as a restricted scope.
+1. Set `OWNER_OPEN_ID` to the founder's Manus open ID before deployment. The owner remains able to sign in without a waitlist record.
+2. Run migration `0009`. It creates `contact_inquiries`, which powers the public Contact page and the Admin Panel inquiry inbox.
+3. Create an invite code in **Admin → Invite Codes**. A valid code approves an application immediately; applications without a code require manual approval in **Admin → Waitlist**.
+4. Tell approved people to sign in with the exact Google account/email address used on their application. The server rejects all other first-time logins.
+5. Invoice customers manually and record paid status outside Close Looper until billing is implemented. Do not describe the product as self-serve paid SaaS.
+
+## Google OAuth production gate
+
+Before connecting customer Gmail accounts, complete Google's OAuth verification for the production OAuth client. The app uses `gmail.send` and `gmail.readonly`; `gmail.readonly` is a restricted scope. Submit the production privacy policy URL, terms URL, authorized domains, scope justification, and a video showing the Gmail connection and reply-detection use case. Keep the OAuth consent screen and this app's disclosures consistent: Gmail data may be used only to send approved messages and to detect replies/delivery failures for those messages.
+
+For the production OAuth client, add exactly this authorized redirect URI in Google Cloud:
+
+```
+https://closelooper.com/api/gmail/callback
+```
+
+Also add `closelooper.com` as an authorized domain, verify it in Google Search Console with a Google Cloud project owner/editor account, and use these public URLs on the consent screen:
+
+```
+https://closelooper.com/
+https://closelooper.com/privacy
+https://closelooper.com/terms
+```

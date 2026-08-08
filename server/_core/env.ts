@@ -11,7 +11,7 @@ export const ENV = {
 };
 
 /** Deployed origin, used when the app has to name itself inside an email. */
-const FALLBACK_APP_URL = "https://closelooper.manus.space";
+const FALLBACK_APP_URL = "https://closelooper.com";
 
 /**
  * Absolute public origin, no trailing slash.

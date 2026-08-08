@@ -26,6 +26,9 @@ export default function LandingPage() {
             <Link href="/signin">
               <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
+            <Link href="/contact">
+              <Button variant="ghost" size="sm">Contact</Button>
+            </Link>
             <Link href="/signup">
               <Button size="sm" className="bg-[#1a1a1a] text-white hover:bg-[#333]">Request Access</Button>
             </Link>
@@ -176,6 +179,7 @@ export default function LandingPage() {
           <div className="flex gap-6">
             <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            <Link href="/contact" className="hover:text-foreground transition-colors">Contact</Link>
             <Link href="/signin" className="hover:text-foreground transition-colors">Sign In</Link>
           </div>
           <span>© 2026 Close Looper. All rights reserved.</span>

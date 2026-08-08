@@ -5,13 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Users, Mail, Key, Share2, BarChart3, CheckCircle2, XCircle, Plus, Copy, Power } from "lucide-react";
+import { Users, Mail, Key, Share2, BarChart3, CheckCircle2, XCircle, Plus, Copy, Power, MessageSquare } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function AdminPanel() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [tab, setTab] = useState<"overview"|"waitlist"|"users"|"invites"|"referrals">("overview");
+  const [tab, setTab] = useState<"overview"|"waitlist"|"users"|"invites"|"referrals"|"inquiries">("overview");
   const [inviteNote, setInviteNote] = useState("");
   const [inviteMaxUses, setInviteMaxUses] = useState(1);
 
@@ -20,11 +20,13 @@ export default function AdminPanel() {
   const { data: allUsers } = trpc.admin.listUsers.useQuery(undefined, { enabled: tab === "users" && user?.role === "admin" });
   const { data: inviteCodes, refetch: refetchInvites } = trpc.admin.listInviteCodes.useQuery(undefined, { enabled: tab === "invites" && user?.role === "admin" });
   const { data: referrals } = trpc.admin.listReferrals.useQuery(undefined, { enabled: tab === "referrals" && user?.role === "admin" });
+  const { data: inquiries, refetch: refetchInquiries } = trpc.admin.listContactInquiries.useQuery(undefined, { enabled: tab === "inquiries" && user?.role === "admin" });
 
   const approveMutation = trpc.admin.approveWaitlist.useMutation({ onSuccess: () => { toast.success("Approved!"); refetchWaitlist(); } });
   const rejectMutation = trpc.admin.rejectWaitlist.useMutation({ onSuccess: () => { toast.success("Rejected."); refetchWaitlist(); } });
   const createInviteMutation = trpc.admin.createInviteCode.useMutation({ onSuccess: (d) => { toast.success(`Invite code created: ${d.code}`); refetchInvites(); setInviteNote(""); } });
   const deactivateMutation = trpc.admin.deactivateInviteCode.useMutation({ onSuccess: () => { toast.success("Code deactivated."); refetchInvites(); } });
+  const inquiryStatusMutation = trpc.admin.updateContactInquiryStatus.useMutation({ onSuccess: () => refetchInquiries() });
 
   if (user?.role !== "admin") {
     return <div className="p-8 text-center text-muted-foreground">Access denied. Admin only.</div>;
@@ -36,6 +38,7 @@ export default function AdminPanel() {
     { id: "users", label: "Users", icon: <Users className="w-4 h-4" /> },
     { id: "invites", label: "Invite Codes", icon: <Key className="w-4 h-4" /> },
     { id: "referrals", label: "Referrals", icon: <Share2 className="w-4 h-4" /> },
+    { id: "inquiries", label: "Inquiries", icon: <MessageSquare className="w-4 h-4" /> },
   ] as const;
 
   return (
@@ -174,6 +177,27 @@ export default function AdminPanel() {
                 <p className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</p>
               </div>
               <Badge variant={r.status === "credited" ? "default" : r.status === "paid" ? "secondary" : "outline"} className="text-xs">{r.status}</Badge>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === "inquiries" && (
+        <div className="space-y-3">
+          {!inquiries?.length && <p className="text-muted-foreground text-sm">No contact inquiries yet.</p>}
+          {inquiries?.map((inquiry: any) => (
+            <div key={inquiry.id} className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="font-medium">{inquiry.subject}</p>
+                  <p className="text-sm text-muted-foreground">{inquiry.name} · <a className="underline" href={`mailto:${inquiry.email}`}>{inquiry.email}</a>{inquiry.companyName ? ` · ${inquiry.companyName}` : ""}</p>
+                  <p className="text-sm mt-3 whitespace-pre-wrap">{inquiry.message}</p>
+                  <p className="text-xs text-muted-foreground mt-3">{new Date(inquiry.createdAt).toLocaleString()}</p>
+                </div>
+                <select value={inquiry.status} onChange={event => inquiryStatusMutation.mutate({ id: inquiry.id, status: event.target.value as "new" | "read" | "closed" })} className="text-xs border rounded px-2 py-1 bg-background">
+                  <option value="new">New</option><option value="read">Read</option><option value="closed">Closed</option>
+                </select>
+              </div>
             </div>
           ))}
         </div>

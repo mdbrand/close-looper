@@ -3,7 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Mail, Plus, Trash2, Star, CheckCircle2, AlertCircle, Mic, ExternalLink, Database, Activity, Zap, Ban, Rocket } from "lucide-react";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -94,6 +94,11 @@ export default function Settings() {
   }, [search]);
 
   const isGmailConfigured = authUrl !== undefined;
+  const connectGmail = () => {
+    if (!authUrl?.url) return;
+    const confirmed = window.confirm("Close Looper will be allowed to send email and read only the reply metadata needed to pause your loops. Your Gmail data is not sold or used for advertising. Continue to Google?");
+    if (confirmed) window.location.href = authUrl.url;
+  };
 
   return (
     <div className="page-enter max-w-2xl space-y-8">
@@ -110,7 +115,7 @@ export default function Settings() {
             <h2 className="font-semibold">Gmail Accounts</h2>
           </div>
           {isGmailConfigured && authUrl?.url ? (
-            <Button size="sm" className="gap-1.5" onClick={() => window.location.href = authUrl.url}>
+            <Button size="sm" className="gap-1.5" onClick={connectGmail}>
               <Plus className="w-3.5 h-3.5" /> Connect Gmail
             </Button>
           ) : (
@@ -120,7 +125,7 @@ export default function Settings() {
             </div>
           )}
         </div>
-        <p className="text-sm text-muted-foreground">Connect your Gmail accounts. Emails will be sent directly from your real outbox for maximum deliverability.</p>
+        <p className="text-sm text-muted-foreground">Connect your Gmail account to send approved messages from your own mailbox. Inbox placement is controlled by Gmail and recipient providers, so it cannot be guaranteed.</p>
         {gmailAccounts && gmailAccounts.length > 0 ? (
           <div className="space-y-2">
             {gmailAccounts.map(account => (
@@ -159,7 +164,7 @@ export default function Settings() {
         )}
         <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs text-blue-700">
           <p className="font-medium mb-1">How Gmail connection works</p>
-          <p>Close Looper uses Gmail OAuth to send emails directly from your real outbox. This means emails land in the Primary inbox — not Promotions — because they come from your actual Gmail account.</p>
+          <p>Close Looper requests Gmail send permission and read-only access only to identify replies to messages it sent, so it can pause the right loop. <Link href="/privacy" className="underline">Read the Gmail data disclosure</Link>.</p>
         </div>
       </section>
 

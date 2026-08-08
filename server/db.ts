@@ -26,7 +26,7 @@ import {
   touchpoints,
   users,
 } from "../drizzle/schema";
-import { senderProfiles, suppressionList } from "../drizzle/schema";
+import { contactInquiries, senderProfiles, suppressionList, userProfiles, waitlistSignups } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -75,6 +75,42 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+/**
+ * New accounts are only provisioned after an administrator has approved the
+ * email address (or an invite code has approved its application). This is the
+ * server-side enforcement point for the invite-only beta.
+ */
+export async function provisionApprovedUser(data: Pick<InsertUser, "openId" | "name" | "email" | "loginMethod">) {
+  if (!data.email) return undefined;
+  const database = await getDb();
+  if (!database) return undefined;
+
+  const [signup] = await database
+    .select()
+    .from(waitlistSignups)
+    .where(and(eq(waitlistSignups.email, data.email), eq(waitlistSignups.status, "approved")))
+    .limit(1);
+  if (!signup) return undefined;
+
+  await upsertUser({ ...data, lastSignedIn: new Date() });
+  const user = await getUserByOpenId(data.openId);
+  if (!user) return undefined;
+
+  const [profile] = await database.select().from(userProfiles).where(eq(userProfiles.userId, user.id)).limit(1);
+  if (!profile) {
+    await database.insert(userProfiles).values({
+      userId: user.id,
+      phone: signup.phone,
+      companyName: signup.companyName,
+      website: signup.website,
+      industry: signup.industry,
+      successMetric: signup.successMetric,
+      inviteCodeUsed: signup.inviteCode,
+    });
+  }
+  return user;
 }
 
 // ─── AI Voice Profile ─────────────────────────────────────────────────────────

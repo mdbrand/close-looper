@@ -354,6 +354,18 @@ export const waitlistSignups = mysqlTable("waitlist_signups", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/** Messages submitted from the public contact page. Kept separate from product contacts. */
+export const contactInquiries = mysqlTable("contact_inquiries", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  companyName: varchar("companyName", { length: 200 }),
+  subject: varchar("subject", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  status: mysqlEnum("status", ["new", "read", "closed"]).default("new").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const referrals = mysqlTable("referrals", {
   id: int("id").autoincrement().primaryKey(),
   referrerUserId: int("referrerUserId").notNull(),

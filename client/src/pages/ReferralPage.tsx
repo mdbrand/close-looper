@@ -10,7 +10,7 @@ export default function ReferralPage() {
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
-  const referralUrl = `https://closelooper.manus.space/signup?ref=${data?.referralCode}`;
+  const referralUrl = `${window.location.origin}/signup?ref=${data?.referralCode}`;
 
   const copyLink = () => { navigator.clipboard.writeText(referralUrl); toast.success("Referral link copied!"); };
   const shareTwitter = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`I've been using Close Looper to stay top of mind with my referral partners — and it's been a game changer. Check it out: ${referralUrl}`)}`);
