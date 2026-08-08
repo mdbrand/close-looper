@@ -1,18 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { startLogin } from "@/const";
-import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 
 export default function SignInPage() {
   const { isAuthenticated, loading } = useAuth();
   const [, navigate] = useLocation();
-  const [showForgot, setShowForgot] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
 
   // After OAuth completes, redirect to the originally-intended URL if saved
   useEffect(() => {
@@ -26,43 +20,6 @@ export default function SignInPage() {
       }
     }
   }, [isAuthenticated, loading]);
-
-  const handleForgot = () => {
-    if (!forgotEmail) { toast.error("Please enter your email address."); return; }
-    setForgotSent(true);
-    toast.success("If that email is in our system, you'll receive a reset link shortly.");
-  };
-
-  if (showForgot) {
-    return (
-      <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center px-4">
-        <div className="max-w-sm w-full">
-          <div className="text-center mb-8">
-            <Link href="/"><span className="text-2xl font-serif font-bold">Close Looper</span></Link>
-            <h1 className="text-2xl font-serif font-bold mt-4 mb-2">Reset your password</h1>
-            <p className="text-muted-foreground text-sm">Enter your email and we'll send you a reset link.</p>
-          </div>
-          <div className="bg-white border border-border/40 rounded-2xl p-8 shadow-sm space-y-4">
-            {forgotSent ? (
-              <div className="text-center py-4">
-                <p className="text-sm text-muted-foreground">Check your inbox. If your email is registered, a reset link is on its way.</p>
-                <Button variant="link" className="mt-4" onClick={() => { setShowForgot(false); setForgotSent(false); }}>Back to Sign In</Button>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-1.5">
-                  <Label htmlFor="forgotEmail">Email Address</Label>
-                  <Input id="forgotEmail" type="email" value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} placeholder="you@example.com" />
-                </div>
-                <Button className="w-full bg-[#1a1a1a] text-white hover:bg-[#333]" onClick={handleForgot}>Send Reset Link</Button>
-                <Button variant="link" className="w-full text-muted-foreground" onClick={() => setShowForgot(false)}>Back to Sign In</Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#FAFAF7] flex items-center justify-center px-4">
@@ -85,8 +42,7 @@ export default function SignInPage() {
             <div className="relative flex justify-center text-xs text-muted-foreground"><span className="bg-white px-2">or</span></div>
           </div>
           <p className="text-xs text-center text-muted-foreground">Close Looper uses Google for secure sign-in. Your Gmail account is used to send emails on your behalf.</p>
-          <button onClick={() => setShowForgot(true)} className="w-full text-xs text-center text-muted-foreground hover:text-foreground underline transition-colors">Forgot password?</button>
-          <p className="text-xs text-center text-muted-foreground">Don't have access? <Link href="/signup" className="underline">Request early access</Link></p>
+          <p className="text-xs text-center text-muted-foreground">Close Looper is invite-only. Use the Google account that received your invitation, or <Link href="/signup" className="underline">request access</Link>.</p>
         </div>
       </div>
     </div>

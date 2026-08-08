@@ -20,6 +20,7 @@ import SignUpPage from "./pages/SignUpPage";
 import SignInPage from "./pages/SignInPage";
 import TermsPage from "./pages/TermsPage";
 import PrivacyPage from "./pages/PrivacyPage";
+import ContactPage from "./pages/ContactPage";
 import AdminPanel from "./pages/AdminPanel";
 import ReferralPage from "./pages/ReferralPage";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -27,7 +28,7 @@ import { startLogin } from "./const";
 import { Loader2 } from "lucide-react";
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ["/", "/signup", "/signin", "/terms", "/privacy"];
+const PUBLIC_PATHS = ["/", "/signup", "/signin", "/terms", "/privacy", "/contact"];
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuth();
@@ -94,6 +95,7 @@ function App() {
             <Route path="/signin" component={SignInPage} />
             <Route path="/terms" component={TermsPage} />
             <Route path="/privacy" component={PrivacyPage} />
+            <Route path="/contact" component={ContactPage} />
             {/* All other routes go through AuthGate + DashboardLayout */}
             <Route component={AppShell} />
           </Switch>
