@@ -43,7 +43,7 @@ export default function LandingPage() {
           Close Looper is the only tool built specifically to keep you top of mind with referral partners — automatically, personally, and consistently — every single month.
         </p>
         <p className="text-base text-muted-foreground max-w-xl mx-auto mb-10">
-          If you drive business from referral partners, this pays for itself hand over fist. It's <strong>$30/month</strong> and it runs itself.
+          If you drive business from referral partners, this pays for itself hand over fist. It's <strong>$57/month</strong> and it runs itself.
         </p>
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link href="/signup">
@@ -122,7 +122,7 @@ export default function LandingPage() {
           <div className="absolute -top-3 left-1/2 -translate-x-1/2">
             <Badge className="bg-amber-400 text-amber-900 border-0 text-xs px-3">Most Popular</Badge>
           </div>
-          <p className="text-5xl font-serif font-bold mb-1">$30</p>
+          <p className="text-5xl font-serif font-bold mb-1">$57</p>
           <p className="text-white/60 text-sm mb-6">per month · cancel anytime</p>
           <ul className="text-sm text-white/80 space-y-2 mb-8 text-left">
             {["Unlimited contacts", "AI email generation", "Multi-Gmail account support", "Approval queue", "Calendar & list views", "Open tracking", "Cold Relationship Sequence", "Business card scanner", "Bulk import/export", "Weekly digest email"].map(f => (
